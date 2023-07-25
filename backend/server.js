@@ -13,7 +13,7 @@ import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import path from 'path';
 
-// import utils
+// import util
 import OpenAI from "./utils/openai.js"
 import Platform from "./utils/platform.js"
 import Pinecone from "./database/pinecone.js"
