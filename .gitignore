@@ -1,0 +1,7 @@
+/backend/.env
+/backend/.env.prod
+/frontend/.env
+/frontend/node_modules
+/frontend/build
+/backend/node_modules
+/backend/database/config.json
