@@ -23,7 +23,7 @@ const Chat = () => {
     try {
       setFetchingResponse(true);
       
-      const response = await axios.post(`${backendUrl}/chat`, {
+      const response = await axios.post(`${backendUrl}/api/chat`, {
         message: query
       });
       

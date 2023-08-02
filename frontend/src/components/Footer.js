@@ -2,7 +2,7 @@ import React, { useContext, useRef } from 'react';
 import { BrowserRouter as Router, Route, Routes, useLocation, Link } from 'react-router-dom';
 import NavBarLogo from './NavBarLogo';
 import Chat from './Chat/Chat';
-import Platforms from './Platforms';
+import Apps from './Apps';
 
 const Footer = ({ selectedItem, onNewChatClick }) => {
 

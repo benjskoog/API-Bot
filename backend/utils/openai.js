@@ -73,8 +73,8 @@ class OpenAI {
 
         this.getAPIcallFunctions = [{
 
-            "name": "callPlatformAPI",
-            "description": "Use this function to call the Platform API",
+            "name": "callAppAPI",
+            "description": "Use this function to call the App API",
             "parameters": {
               "type": "object",
               "properties": {

@@ -7,7 +7,8 @@ const User = sequelize.define('User', {
         type: DataTypes.UUID,
         allowNull: false,
         primaryKey: true,
-        unique: true
+        unique: true,
+        defaultValue: DataTypes.UUIDV4
     },
   username: {
     type: DataTypes.STRING,
@@ -34,7 +35,8 @@ const Conversation = sequelize.define('Conversation', {
         type: DataTypes.UUID,
         allowNull: false,
         primaryKey: true,
-        unique: true
+        unique: true,
+        defaultValue: DataTypes.UUIDV4
     },
   userId: {
     type: DataTypes.UUID,
@@ -55,7 +57,8 @@ const Message = sequelize.define('Message', {
         type: DataTypes.UUID,
         allowNull: false,
         primaryKey: true,
-        unique: true
+        unique: true,
+        defaultValue: DataTypes.UUIDV4
     },
   conversationId: {
     type: DataTypes.UUID,
@@ -83,7 +86,8 @@ const APIRequest = sequelize.define('APIRequest', {
         type: DataTypes.UUID,
         allowNull: false,
         primaryKey: true,
-        unique: true
+        unique: true,
+        defaultValue: DataTypes.UUIDV4
     },
   conversationId: {
     type: DataTypes.UUID,
@@ -110,37 +114,70 @@ const APIRequest = sequelize.define('APIRequest', {
   }
 });
 
-// Update Platform model
-const Platform = sequelize.define('Platform', {
+// Update App model
+const App = sequelize.define('App', {
     id: {
         type: DataTypes.UUID,
         allowNull: false,
         primaryKey: true,
-        unique: true
+        unique: true,
+        defaultValue: DataTypes.UUIDV4
     },
   name: {
     type: DataTypes.STRING,
+    allowNull: false
+  },
+  clientId: {
+    type: DataTypes.STRING,
+    allowNull: false
+  },
+  clientSecret: {
+    type: DataTypes.STRING,
+    allowNull: false
+  },
+  authType: {
+    type: DataTypes.TEXT,
+    allowNull: false
+  },
+  authUrl: {
+    type: DataTypes.STRING,
+    allowNull: false
+  },
+  accessTokenUrl: {
+    type: DataTypes.TEXT,
     allowNull: false
   },
   documentationUrl: {
     type: DataTypes.STRING,
     allowNull: true
   },
+  apiUrl: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  documentation: {
+    type: DataTypes.JSON,
+    allowNull: true
+  },
   logoUrl: {
     type: DataTypes.STRING,
     allowNull: true
   },
-  // You might want to store some general details about the platform here, 
-  // but specific user authentication details should go in UserPlatform
+  formFields: {
+    type: DataTypes.JSON,
+    allowNull: true
+  }
+
 });
 
-// New UserPlatform model
-const UserPlatform = sequelize.define('UserPlatform', {
+// New UserApp model
+const UserApp = sequelize.define('UserApp', {
   id: {
     type: DataTypes.UUID,
     allowNull: false,
     primaryKey: true,
-    unique: true
+    unique: true,
+    defaultValue: DataTypes.UUIDV4
   },
   userId: {
     type: DataTypes.UUID,
@@ -149,42 +186,77 @@ const UserPlatform = sequelize.define('UserPlatform', {
       key: 'id'
     }
   },
-  platformId: {
+  appId: {
     type: DataTypes.UUID,
     references: {
-      model: Platform,
+      model: App,
       key: 'id'
     }
   },
   accessToken: {
-    type: DataTypes.STRING,
+    type: DataTypes.TEXT,
     allowNull: true
   },
   refreshToken: {
-    type: DataTypes.STRING,
+    type: DataTypes.TEXT,
+    allowNull: true
+  },
+  apiKey: {
+    type: DataTypes.TEXT,
     allowNull: true
   },
   expiresAt: {
     type: DataTypes.DATE,
     allowNull: true
   },
-  // Any other fields needed for authentication or configuration with the platform
+  userInputs: {
+    type: DataTypes.JSON,
+    allowNull: true
+  },
+  // Any other fields needed for authentication or configuration with the app
 });
 
-// User - UserPlatform relationship
-User.hasMany(UserPlatform, {
+const PasswordResetToken = sequelize.define('PasswordResetToken', {
+  id: {
+      type: DataTypes.UUID,
+      allowNull: false,
+      primaryKey: true,
+      unique: true,
+      defaultValue: DataTypes.UUIDV4
+  },
+  userId: {
+      type: DataTypes.UUID,
+      allowNull: false,
+      references: {
+          model: User, 
+          key: 'id'
+      }
+  },
+  token: {
+      type: DataTypes.TEXT,
+      allowNull: false
+  },
+  expiresAt: {
+      type: DataTypes.DATE,
+      allowNull: false
+  }
+});
+
+// User - UserApp relationship
+User.hasMany(UserApp, {
   foreignKey: 'userId'
 });
-UserPlatform.belongsTo(User, {
+UserApp.belongsTo(User, {
   foreignKey: 'userId'
 });
 
-// Platform - UserPlatform relationship
-Platform.hasMany(UserPlatform, {
-  foreignKey: 'platformId'
+// App - UserApp relationship
+App.hasMany(UserApp, {
+  as: 'userApps', // Alias
+  foreignKey: 'appId',
 });
-UserPlatform.belongsTo(Platform, {
-  foreignKey: 'platformId'
+UserApp.belongsTo(App, {
+  foreignKey: 'appId',
 });
 
 
@@ -220,4 +292,7 @@ APIRequest.belongsTo(Conversation, {
   foreignKey: 'conversationId'
 });
 
-export { User, Conversation, Message, APIRequest, Platform };
+User.hasMany(PasswordResetToken, { foreignKey: 'userId' });
+PasswordResetToken.belongsTo(User, { foreignKey: 'userId' });
+
+export { User, Conversation, Message, APIRequest, App, PasswordResetToken, UserApp };

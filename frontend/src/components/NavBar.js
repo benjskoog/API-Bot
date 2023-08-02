@@ -1,30 +1,29 @@
 import React, { useContext, useRef } from 'react';
-import { BrowserRouter as Router, Route, Routes, useLocation, Link } from 'react-router-dom';
-import NavBarLogo from './NavBarLogo';
+import { BrowserRouter as Router, Route, Routes, Navigate, useLocation } from 'react-router-dom';
 import Chat from './Chat/Chat';
-import Platforms from './Platforms';
-import NewPlatform from './NewPlatform';
+import Apps from './Apps';
+import NewApp from './NewApp';
+import AppView from './AppView';
+import UserContext from './User/UserContext';
+import { ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 
 const NavBar = ({ currentPath }) => {
 
-  const icon1 = useRef(null);
-  const menu1 = useRef(null);
-  const icon2 = useRef(null);
-  const menu2 = useRef(null);
+   const mainRef = useRef();
+   const chatRef = useRef();
+   const location = useLocation();
+   const { user, loading, logout } = useContext(UserContext);
+ 
+   if (!loading && !user && location.pathname !== '/login' && location.pathname !== '/register' && location.pathname !== '/forgot-password' && location.pathname !== '/reset-password') {
+      return <Navigate to="/login" />;
+   }
 
-  const showMenu1 = () => {
-    icon1.current.classNameList.toggle("rotate-180");
-    menu1.current.classNameList.toggle("hidden");
-  };
-
-  const showMenu2 = () => {
-    icon2.current.classNameList.toggle("rotate-180");
-    menu2.current.classNameList.toggle("hidden");
-  };
 
   return (
 <> 
 <div>
+<ToastContainer />
    <nav className="bg-white border-b border-gray-200 fixed z-30 w-full">
       <div className="px-3 py-3 lg:px-5 lg:pl-3">
          <div className="flex items-center justify-between">
@@ -99,11 +98,11 @@ const NavBar = ({ currentPath }) => {
                         </a>
                      </li>
                      <li>
-                        <a href="/platforms" className="text-base text-gray-900 font-normal rounded-lg hover:bg-gray-100 flex items-center p-2 group ">
+                        <a href="/apps" className="text-base text-gray-900 font-normal rounded-lg hover:bg-gray-100 flex items-center p-2 group ">
                            <svg className="w-6 h-6 text-gray-500 flex-shrink-0 group-hover:text-gray-900 transition duration-75" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
                               <path d="M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zM5 11a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5zM11 5a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V5zM11 13a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path>
                            </svg>
-                           <span className="ml-3 flex-1 whitespace-nowrap">Platforms</span>
+                           <span className="ml-3 flex-1 whitespace-nowrap">Apps</span>
                            <span className="bg-gray-200 text-gray-800 ml-3 text-sm font-medium inline-flex items-center justify-center px-2 rounded-full">Pro</span>
                         </a>
                      </li>
@@ -134,11 +133,11 @@ const NavBar = ({ currentPath }) => {
                         </a>
                      </li>
                      <li>
-                        <a href="#" className="text-base text-gray-900 font-normal rounded-lg hover:bg-gray-100 flex items-center p-2 group ">
+                        <a onClick={() => logout()} className="text-base text-gray-900 font-normal rounded-lg hover:bg-gray-100 flex items-center p-2 group ">
                            <svg className="w-6 h-6 text-gray-500 flex-shrink-0 group-hover:text-gray-900 transition duration-75" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
                               <path fill-rule="evenodd" d="M3 3a1 1 0 00-1 1v12a1 1 0 102 0V4a1 1 0 00-1-1zm10.293 9.293a1 1 0 001.414 1.414l3-3a1 1 0 000-1.414l-3-3a1 1 0 10-1.414 1.414L14.586 9H7a1 1 0 100 2h7.586l-1.293 1.293z" clip-rule="evenodd"></path>
                            </svg>
-                           <span className="ml-3 flex-1 whitespace-nowrap">Sign In</span>
+                           <span className="ml-3 flex-1 whitespace-nowrap">Sign Out</span>
                         </a>
                      </li>
                      <li>
@@ -184,8 +183,9 @@ const NavBar = ({ currentPath }) => {
       <div className="bg-gray-900 opacity-50 hidden fixed inset-0 z-10" id="sidebarBackdrop"></div>
       <div id="main-content" class="h-full w-full bg-gray-50 relative overflow-y-auto lg:ml-64">
         {currentPath === "/chat" ? <Chat /> : ""}
-        {currentPath === "/new-platform" ? <NewPlatform /> : ""}
-        {currentPath === "/platforms" ? <Platforms /> : ""}
+        {currentPath === "/new-app" ? <NewApp /> : ""}
+        {currentPath === "/apps" ? <Apps /> : ""}
+        {currentPath === "/app" ? <AppView /> : ""}
       </div>
    </div>
 </div>
