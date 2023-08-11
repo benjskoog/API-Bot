@@ -10,7 +10,7 @@ import bodyParser from "body-parser";
 import { sequelize } from './database/db.js';
 import { Op } from 'sequelize';
 import { PineconeClient } from "@pinecone-database/pinecone";
-import { User, Conversation, Message, APIRequest, App as App_sql, UserApp } from './database/models.js';
+import { User, Conversation, Message, APIRequest, App as App_sql, UserApp, Documentation } from './database/models.js';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import path from 'path';
@@ -19,9 +19,9 @@ import jwt from "jsonwebtoken";
 import crypto from "crypto";
 
 // import util
-import OpenAI from "./utils/openai.js"
-import App from "./utils/app.js"
-import Pinecone from "./database/pinecone.js"
+import openai from "./utils/openai.js"
+import appManager from "./utils/apps/index.js"
+import pinecone from "./database/pinecone.js"
 import { sendEmail } from "./utils/sendgrid.js"
 
 const __filename = fileURLToPath(import.meta.url);
@@ -34,11 +34,6 @@ if (process.env.NODE_ENV === 'production') {
   dotenv.config({ path: path.resolve(__dirname, '../.env') });
   console.log("dev")
 }
-
-const openai = new OpenAI();
-const pinecone = new Pinecone();
-
-const apiURL = "https://developers.welcomesoftware.com/openapi/openapi.yaml?hash=0145985";
 
 const index = pinecone.index;
 const indexDescription = pinecone.indexDescription;
@@ -88,45 +83,6 @@ function authenticate(req, res, next) {
     return res.status(403).json({ error: 'Invalid token' });
   }
 }
-
-const uploadApiEndpoints = async (documentation) => {
-  const { paths } = documentation;
-
-  for (let path in paths) {
-    const methods = paths[path];
-    
-    for (let method in methods) {
-      const methodData = methods[method];
-      const description = methodData.description;
-
-      // Create a string that includes the path, method, and description
-      const inputString = `Path:${path} 
-                           Method: ${method.toUpperCase()} 
-                           Description: ${description}`;
-
-      // replace with class
-      const embedding = await openai.createEmbedding(inputString);
-
-      // Construct metadata
-      const metadata = {
-        path,
-        method,
-        description
-      };
-
-      // Upload the vector embedding to Pinecone
-
-      const upsertResponse = await pinecone.upsertSingle({
-        id: `${path}-${method}`,
-        values: embedding,
-        metadata,
-      });
-      
-      console.log(upsertResponse);
-    }
-  }
-
-};
 
 const resolveRef = (schema, root) => {
 
@@ -185,6 +141,7 @@ const buildApiDocumentation = (searchResults, docType, documentation) => {
         let docString = `
           Path: ${path}
           Method: ${method.toUpperCase()}
+          Summary: ${endpointInfo.summary}
           Description: ${endpointInfo.description}
         `;
 
@@ -215,88 +172,68 @@ const buildApiDocumentation = (searchResults, docType, documentation) => {
   return totalDocumentationString;
 };
 
-async function callAppAPI(method, path, body) {
-
-  const apiUrl = `https://api.welcomesoftware.com/v3${path}`
-
-  const headers = {
-    "Authorization": `Bearer ${process.env.CMP_ACCESS_KEY}`,
-    "Accept": "application/json",
-    "Connection": "keep-alive"
-  };
-
-  console.log(JSON.stringify({method, apiUrl, headers, body}));
-
-  try {
-      const response = await axios({
-          method,
-          url: apiUrl,
-          headers,
-          data: body
-      });
-
-      console.log(response.data);
-      
-      return response.data;
-  } catch (error) {
-      console.error(`Error occurred while calling CMP API: ${error}`);
-      return null;
-  }
-}
-
-async function similaritySearch(userRequest, topK){
+async function similaritySearch(userRequest, appName,topK){
 
   const embedding = await openai.createEmbedding(userRequest);
 
-  const queryResponse = await pinecone.similaritySearch(embedding, 2);
+  const queryResponse = await pinecone.searchByApp(embedding, appName, topK);
 
   return queryResponse;
 
 }
 
-function buildApiPrompt(userRequest, supported, apiDocumentation) {
+function buildApiPrompt(userRequest, supported, apiDocumentation, selectedApp, userApp, type) {
 
   const today = new Date();
   const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-  let prompt;
+
+  let prompt = `The following is a user's request to interact with ${selectedApp.name} on ${dateStr}.`;
+  
+  prompt += `User request: ${userRequest} \n`;
 
   if (supported === true){
 
-    prompt = `The following is a user's request to interact with the Optimizely Content Marketing Platform on ${dateStr}: \n
-  
-    ${userRequest} \n
-  
-    Here is API documentation you can use to fulfill the user's request: \n
-  
-    ${apiDocumentation} \n
+    prompt += type === "summary" ? "Read the user's request carefully and select the most relevant endpoint below. Check your work: \n" : `Here is API documentation you can use to call ${selectedApp.name}'s API: \n`;
+
+    prompt += `${apiDocumentation} \n
     `;
+
+    prompt += type === "summary" ? "Do not select an endpoint that requires information you do not have. Please ask the user for this information first" : "";
+
+    // userApp ? prompt += ` The user's ID in ${selectedApp.name} is ${userApp.appUserId}. Only use this where the documentation states to explicitly use the user's ID. \n` : "";
 
   } else {
 
-    prompt = `The following is a user's request to interact with the Optimizely Content Marketing Platform on ${dateStr}: \n
-  
-    ${userRequest} \n
-  
-    The request is not supported by the API. Please inform the user. You can also answer their question if it is unrelated to the platform or the API.
-    `;
+    prompt = prompt + `The request is not supported by the API. Please inform the user. You can also answer their question if it is unrelated to the platform or the API.`;
 
   }
 
   console.log(prompt);
 
   return prompt;
-
   
 }
 
-async function fulfillRequest(userRequest, documentation, numPass, apiRequest) {
+async function fulfillRequest(userRequest, documentation, numPass, apiRequest, selectedApp, userId) {
 
   try {
+
+    const userApp = await UserApp.findOne({
+      where: {
+        userId,
+        appId: selectedApp.id,
+      }
+    });
+
+    const handleApp = appManager.getApp(selectedApp);
+
     let currentPass = numPass + 1;
 
     let searchString = apiRequest ? apiRequest : userRequest;
 
-    const relevantDocs = await similaritySearch(searchString, 2);
+    const relevantDocs = await similaritySearch(searchString, selectedApp.name, 4);
+
+    console.log(relevantDocs);
 
     // Check the similarity score of the highest scored doc for relevancy
     const minScore = 0.70;
@@ -309,13 +246,13 @@ async function fulfillRequest(userRequest, documentation, numPass, apiRequest) {
       // Builds API documentation based on similaritySearch results
       const apiEndpoints = buildApiDocumentation(relevantDocs.matches, "summary", documentation)
 
-      alteredRequest = buildApiPrompt(userRequest, true, apiEndpoints);
+      alteredRequest = buildApiPrompt(userRequest, true, apiEndpoints, selectedApp, userApp, "summary");
 
     } else {
 
       alteredRequest = buildApiPrompt(userRequest, false);
 
-      const unsupportedResponse = openai.returnUnsupported(alteredRequest);
+      const unsupportedResponse = openai.returnUnsupported(alteredRequest, "api");
 
       return unsupportedResponse
 
@@ -337,11 +274,13 @@ async function fulfillRequest(userRequest, documentation, numPass, apiRequest) {
 
         const apiDocumentation = buildApiDocumentation([relevantDocs.matches[bestMatch]], "full", documentation);
 
-        alteredRequest = buildApiPrompt(userRequest, true, apiDocumentation);
+        alteredRequest = buildApiPrompt(userRequest, true, apiDocumentation, selectedApp, userApp, "full");
+
+        // Uncomment line below to return API documentation in chat for testing purposes
 
         return alteredRequest;
 
-        const apiCall = await openai.getAPICall(alteredRequest);
+        const apiCall = await openai.getAPICall(alteredRequest, selectedApp, userApp, userId);
 
         const apiArgs = apiCall.args;
 
@@ -349,7 +288,9 @@ async function fulfillRequest(userRequest, documentation, numPass, apiRequest) {
 
         if (apiArgs) {
 
-          const apiResponse = await callAppAPI(apiArgs.method, apiArgs.path, apiArgs.body);
+          const handleApp = appManager.getApp(selectedApp);
+
+          const apiResponse = await handleApp.callAppAPI(apiArgs.method, apiArgs.path, apiArgs.body, userApp.apiUrl, userApp);
 
           if (apiResponse === null) {
 
@@ -365,17 +306,7 @@ async function fulfillRequest(userRequest, documentation, numPass, apiRequest) {
 
         const infoSource = decisionArgs.source;
 
-        if (infoSource === "documentation") {
-
           return decisionArgs.question
-
-          // await fulfillRequest(userRequest, documentation, currentPass, decisionArgs.question);
-
-        } else {
-
-          return decisionArgs.question
-
-        }
 
       } else {
 
@@ -385,40 +316,6 @@ async function fulfillRequest(userRequest, documentation, numPass, apiRequest) {
 
     }
 
-    /*
-
-    if (decision.func_name) {
-
-      if (decision.func_name === "callPlatformAPI") {
-
-        const apiResponse = callPlatformAPI(decision.args.method, decision.args.method, decision.args.body);
-
-        const responseForUser = openai.returnResponse(apiResponse, decision.args.method);
-
-        return responseForUser;
-
-      } else if (decision.func_name === "moreAPIInfo") {
-
-        if (currentPass < 2) {
-
-          await fulfillRequest(userRequest, documentation, currentPass, decision.args.otherDocsRequest);
-
-        } else {
-
-          return cannotFulfillRequest;
-
-        }
-
-      } else if (decision.func_name === "moreUserInfo") {
-
-        return decision.args.request;
-        
-      } else return cannotFulfillRequest;
-
-    }
-
-    */
-
   } catch (error) {
     console.error(`Failed to fulfill request: ${error.message}`);
     throw error;  // re-throw the error if you want to handle it at the caller side, or return a default response.
@@ -426,29 +323,103 @@ async function fulfillRequest(userRequest, documentation, numPass, apiRequest) {
 
 }
 
+async function getApps(userId) {
+  const apps = await App_sql.findAll({
+    include: {
+      model: UserApp,
+      where: {
+        userId,
+        accessToken: {
+          [Op.ne]: null // Op.ne represents the "not equal" operator
+        }
+      },
+      as: 'userApps', // Use the alias
+      required: false
+    }
+  });
 
-router.post("/chat", async (req, res) => {
+  // Transforming the data to include a flag indicating whether the user has connected to each app
+  const transformedApps = apps.map(app => ({
+    ...app.get(),
+    isConnected: app.userApps && app.userApps.length > 0
+  }));
 
-  const userMessage = req.body.message;  // extract the message from the request body
+  return transformedApps;
+}
+
+
+router.post("/chat", authenticate, async (req, res) => {
+
+  const userId = req.userId;
+
+  console.log(userId);
+
+  const userMessage = req.body.message;
+
+  // Get user's apps and convert to string to pass to GPT with user message
+  const userApps = await getApps(userId);
+
+  const userAppsString = userApps.filter(app => app.isConnected === true).map(app => app.name).join(', ');
 
   try {
-    const response = await axios.get(apiURL);
-    const yamlData = response.data;
-    const documentation = yaml.load(yamlData);
 
-    // Check if "paths" property exists in the JSON object
-    if (!documentation.hasOwnProperty('paths')) {
-      console.error('No "paths" property in the parsed YAML data');
-      return res.status(500).send('No "paths" property in the parsed YAML data');
+    // GPT to decide which app the request is about by using function calls
+    const appDecision = await openai.selectApp(userMessage, userAppsString);
+
+    // GPT to optimize request for similarity search
+
+    let optimizedRequest = await openai.optimizeRequest(userMessage);
+
+    optimizedRequest = optimizedRequest.response;
+
+    let selectedApp;
+    let documentation;
+
+    if (appDecision.args) {
+      selectedApp = appDecision.args.app;
+      selectedApp = userApps.filter(app => app.name === selectedApp)[0];
+      console.log(selectedApp.documentationUrl);
+
+      // Test block auth refresh for Asana
+
+/*       const handleApp = appManager.getApp(selectedApp);
+
+      const userApp = await UserApp.findOne({
+        where: {
+          userId,
+          appId: selectedApp.id,
+        }
+      });
+
+      const apiResponse = await handleApp.callAppAPI("GET", "/rest/api/3/project", "" , "https://api.atlassian.com/ex/jira/83447faa-d20d-4838-bbe4-8a3efcaf4955", userApp);
+
+      return(apiResponse); */
+
+      // Test block end
+
+      // delete vectors for selected docs with line below
+
+      // const deleteAsanaDocs = await pinecone.deleteVecsForApp(selectedApp.name);
+
+      const handleApp = appManager.getApp(selectedApp);
+
+      const documentation = await handleApp.loadDocumentation();
+
+      const chatResponse = await fulfillRequest(optimizedRequest, documentation, null, null, selectedApp, userId);
+
+      res.json(chatResponse)
+
+      //console.log(documentation);
+
+    } else {
+      const unsupportedResponse = openai.returnUnsupported(userMessage, "api");
+
+      res.json(unsupportedResponse);
     }
 
-    const chatResponse = await fulfillRequest(userMessage, documentation);
-
-    res.json(chatResponse)
-
   } catch (error) {
-    console.error('Error downloading or parsing YAML:', error);
-    res.status(500).send('Error downloading or parsing YAML');
+    console.error('Error with chat route:', error);
+    res.status(500).send('Error with chat route');
   }
 
 });
@@ -464,9 +435,9 @@ router.post("/handle-connect/:appId", authenticate, async (req, res) => {
   }
 
   try {
-    const appHandler = new App(app);
+    const appHandler = appManager.getApp(app);
 
-    const authUrl = await appHandler.createAuthURL(userInputs ? userInputs : null, userId);
+    const authUrl = await appHandler.getAuthUrl(userInputs ? userInputs : null, userId);
 
     // Check if a record with this userId and appId already exists
     let existingUserApp = await UserApp.findOne({
@@ -478,8 +449,9 @@ router.post("/handle-connect/:appId", authenticate, async (req, res) => {
 
     let userAppData;
     if (existingUserApp) {
-      // Update the existing record
+
       existingUserApp.userInputs = userInputs;
+
       await existingUserApp.save();
       userAppData = existingUserApp;
     } else {
@@ -553,25 +525,7 @@ router.get("/apps", authenticate, async (req, res) => {
     const userId = req.userId;
 
     // Find all apps, including related UserApp records for the specific user where accessToken is not null
-    const apps = await App_sql.findAll({
-      include: {
-        model: UserApp,
-        where: {
-          userId,
-          accessToken: {
-            [Op.ne]: null // Op.ne represents the "not equal" operator
-          }
-        },
-        as: 'userApps', // Use the alias
-        required: false
-      }
-    });
-
-    // Transforming the data to include a flag indicating whether the user has connected to each app
-    const transformedApps = apps.map(app => ({
-      ...app.get(),
-      isConnected: app.userApps && app.userApps.length > 0
-    }));
+    const transformedApps = await getApps(userId);
 
     // Send the transformed apps in the response
     res.json(transformedApps);
@@ -592,8 +546,9 @@ router.get("/app/:id", async (req, res) => {
       return res.status(404).send('App not found');
     }
 
+    console.log(indexDescription);
+
     // send the found app in the response
-    console.log(app);
     res.json(app);
   } catch (err) {
     console.error(err);
@@ -604,7 +559,7 @@ router.get("/app/:id", async (req, res) => {
 router.post("/app", async (req, res) => {
 
   // extract the app data from the request body
-  const { name, authType, clientId, clientSecret, authUrl, accessTokenUrl, apiUrl, logoUrl, website, formFields } = req.body;
+  const { name, systemName, authType, clientId, clientSecret, authUrl, accessTokenUrl, documentationUrl, apiUrl, logoUrl, website, formFields, authFlowType } = req.body;
 
   // validate app data here (if necessary)
 
@@ -645,7 +600,9 @@ router.post("/app", async (req, res) => {
     // create a new app
     const app = await App_sql.create({
       name,
-      authType, 
+      systemName,
+      authType,
+      authFlowType,
       clientId,
       clientSecret,
       authUrl,
@@ -664,13 +621,162 @@ router.post("/app", async (req, res) => {
   }
 });
 
-router.patch("/app/:id", async (req, res) => {
-  // extract the app data from the request body
-  const { name: appName, authType, clientId, clientSecret, authUrl, accessTokenUrl, apiUrl, documentationUrl, logoUrl, website, formFields } = req.body;
+router.get("/docs/:appId", async (req, res) => {
 
-  // validate app data here (if necessary)
+  try {
+
+    console.log("getting docs")
+
+    const docs = await Documentation.findAll({
+      where: {
+        appId: req.params.appId
+      }
+    });
+  
+    res.json(docs);
+
+  } catch (err) {
+    res.status(500).send('Error getting docs');
+    console.log(err)
+  }
+
+});
+
+router.patch("/docs/:docId", async (req, res) => {
+  try {
+    const { docId } = req.params;
+    const { botSummary, botDescription, next, vecId, app } = req.body; // De-structure new fields from the request body
+
+    // Validation can be added for botSummary, botDescription, and next if needed
+
+    // Find a specific documentation by its ID
+    const docToUpdate = await Documentation.findOne({
+      where: {
+        id: docId
+      }
+    });
+
+    // If no documentation is found with the specified ID, send a 404 response
+    if (!docToUpdate) {
+      return res.status(404).send('Documentation not found.');
+    }
+
+    // Update the new fields of the documentation
+    if (botSummary !== undefined) docToUpdate.botSummary = botSummary;
+    if (botDescription !== undefined) docToUpdate.botDescription = botDescription;
+    if (next !== undefined) docToUpdate.next = next;
+
+    await docToUpdate.save();
+
+    // Update vectors
+    const handleApp = appManager.getApp(app);
+    await handleApp.updateDocumentation(docToUpdate);
+
+    // Send back the updated documentation as a response
+    res.json(docToUpdate);
+
+  } catch (err) {
+    res.status(500).send('Error updating documentation');
+    console.log(err);
+  }
+});
+
+
+router.post("/docs/:appId", authenticate, async (req, res) => {
+
+  const userId = req.userId;
+
+  // find app by id
+  const app = await App_sql.findByPk(req.params.appId);
+
+  const userApp = await UserApp.findOne({
+    where: {
+      userId: req.userId,
+      appId: req.params.appId
+    }
+  });
+
+  const appHandler = appManager.getApp(app);
+
+  // check if the app exists
+  if (!app) {
+    return res.status(404).send('App not found');
+    }
+  
+  const embedding = await openai.createEmbedding("GET");
+
+  const appDocs = await pinecone.searchByApp(embedding, app.name, 1);
+
+  let documentation;
+  let savedDocumentation;
+
+  try {
+
+    if (appDocs.matches.length === 0) {
+
+      documentation = await appHandler.createDocumentation(app, userApp)
+
+      let existingDoc = await Documentation.findOne({
+        where: {
+          appId: req.params.appId,
+          type: "full"
+        }
+      });
+      
+      console.log(existingDoc);
+
+      if (existingDoc) {
+
+        existingDoc.specification = documentation
+
+        existingDoc.save()
+
+      } else {
+
+        savedDocumentation = await Documentation.create({
+          specification: documentation,
+          appId: app.id,
+          method: "NA",
+          path: "NA",
+          type: "full"
+        })
+
+        console.log(savedDocumentation)
+
+      }
+
+    }
+
+    const response = documentation ? "created" : "exists";
+
+    res.json(response);
+  } catch (error) {
+    console.error('Error downloading or parsing YAML:', error);
+    res.status(500).send('Error downloading or parsing YAML');
+  }
 
   // create app in database
+});
+
+router.delete("/docs/:appId", async (req, res) => {
+
+  const app = await App_sql.findByPk(req.params.appId);
+
+  const deletedRecordsCount = await Documentation.destroy({
+    where: { appId: app.id }
+  });
+
+  const deleteResponse = await pinecone.deleteVecsForApp(app.name);
+
+  console.log(deleteResponse);
+
+  res.json(deleteResponse);
+
+});
+
+router.patch("/app/:id", async (req, res) => {
+
+  const { name: appName, systemName, authType, authFlowType, clientId, clientSecret, authUrl, accessTokenUrl, apiUrl, documentationUrl, logoUrl, website, formFields } = req.body;
 
   try {
     // get the app by its id
@@ -683,10 +789,12 @@ router.patch("/app/:id", async (req, res) => {
 
     // update the app
     app.name = appName;
+    app.systemName = systemName;
     app.authType = authType;
     app.clientId = clientId;
     app.clientSecret = clientSecret;
     app.authUrl = authUrl;
+    app.authFlowType = authFlowType;
     app.accessTokenUrl = accessTokenUrl;
     app.documentationUrl = documentationUrl;
     app.apiUrl = apiUrl;
@@ -834,14 +942,15 @@ router.get('/oauth/:appId', async (req, res) => {
   console.log(appId)
 
   const app = await App_sql.findByPk(appId);
+  console.log(app.systemName)
+
+  const authFlowType = app.authFlowType;
 
   const userApp = await UserApp.findOne({ where: { appId: appId, userId: userId } });
 
-  console.log(userApp);
+  const appHandler = appManager.getApp(app);
 
-  const appHandler = new App(app);
-
-  const postUrl = await appHandler.createAccessURL(userApp.userInputs);
+  const postUrl = await appHandler.getAccessUrl(userApp.userInputs);
 
   console.log(postUrl);
 
@@ -850,31 +959,56 @@ router.get('/oauth/:appId', async (req, res) => {
   }
 
   try {
-    // exchange code for access token
-    const tokenResponse = await axios({
-      method: 'post',
-      url: postUrl,
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      data: qs.stringify({
-        grant_type: 'authorization_code',
-        code: code,
-        client_id: app.clientId,
-        client_secret: app.clientSecret,
-        redirect_uri: `https://24fd-136-29-96-224.ngrok-free.app/api/oauth/${app.id}`
-      })
-    });
-
-    console.log(tokenResponse);
+    let tokenResponse;
+    // Determine the authentication flow
+    if (authFlowType === 'auth_code') {
+      // exchange code for access token using the authorization code flow
+      tokenResponse = await axios({
+        method: 'post',
+        url: postUrl,
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        data: qs.stringify({
+          grant_type: 'authorization_code',
+          code: code,
+          client_id: app.clientId,
+          client_secret: app.clientSecret,
+          redirect_uri: `${process.env.NGROK_TUNNEL}/api/oauth/${app.id}`
+        })
+      });
+    } else if (authFlowType === 'client_credentials') {
+      // exchange credentials for access token using the client credentials flow
+      tokenResponse = await axios({
+        method: 'post',
+        url: postUrl,
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        data: qs.stringify({
+          grant_type: 'client_credentials',
+          client_id: app.clientId,
+          client_secret: app.clientSecret
+        })
+      });
+    } else {
+      return res.status(400).send('Unsupported authentication flow type');
+    }
 
     const { access_token, refresh_token, expires_in } = tokenResponse.data;
 
+    console.log(tokenResponse.data);
+
+    const apiUrl = await appHandler.getApiUrl(access_token);
+
+    const appUserId = await appHandler.getUserId(tokenResponse.data);
+
+    console.log(apiUrl);
+    console.log(appUserId);
+
     userApp.accessToken = access_token;
     userApp.refreshToken = refresh_token;
+    userApp.apiUrl = apiUrl;
     userApp.expiresAt = expires_in;
+    userApp.appUserId = appUserId;
 
     await userApp.save();
-
-    const userToken = jwt.sign({ userId: userId }, process.env.JWT_SECRET_KEY);
 
     let frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
 
@@ -899,16 +1033,12 @@ router.get('/oauth/:appId', async (req, res) => {
         </body>
       </html>
     `);
-  
-
 
   } catch (error) {
     console.error('Error in OAuth callback', error);
     res.status(500).send('Error in OAuth callback');
   }
 });
-
-
 
 export { router };
 

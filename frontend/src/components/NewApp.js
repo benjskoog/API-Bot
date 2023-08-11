@@ -6,9 +6,11 @@ import 'react-toastify/dist/ReactToastify.css';
 
 const NewApp = ({ currentPath }) => {
   const appNameRef = useRef();
+  const appSystemNameRef = useRef();
   const clientIdRef = useRef();
   const clientSecretRef = useRef();
   const authTypeRef = useRef();
+  const authFlowTypeRef = useRef();
   const authUrlRef = useRef();
   const accessTokenUrlRef = useRef();
   const documentationUrlRef = useRef();
@@ -37,7 +39,9 @@ const NewApp = ({ currentPath }) => {
   
     const appData = {
       name: appNameRef.current ? appNameRef.current.value : '',
+      systemName: appSystemNameRef.current ? appSystemNameRef.current.value : '',
       authType: authTypeRef.current ? authTypeRef.current.value : '',
+      authFlowType: authFlowTypeRef.current ? authFlowTypeRef.current.value : '',
       clientId: clientIdRef.current ? clientIdRef.current.value : '',
       clientSecret: clientSecretRef.current ? clientSecretRef.current.value : '',
       authUrl: authUrlRef.current ? authUrlRef.current.value : '',
@@ -47,6 +51,8 @@ const NewApp = ({ currentPath }) => {
       logoUrl: logoURLRef.current ? logoURLRef.current.value : '',
       formFields: formFieldsRef.current ? formFieldsRef.current.value : '',
     };
+
+    console.log(appData);
   
     try {
       const response = await axios.post(`${backendUrl}/api/app`, appData);
@@ -78,11 +84,22 @@ const NewApp = ({ currentPath }) => {
         <input ref={appNameRef} type="text" id="app_name" className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500" placeholder="Jira" required></input>
     </div>
     <div>
+        <label for="system_name" className="block mb-2 text-sm font-medium text-gray-900 dark:text-gray-300">System Name</label>
+        <input ref={appSystemNameRef} type="text" id="system_name" className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500" placeholder="Jira" required></input>
+    </div>
+    <div>
       <label for="auth_type" className="block mb-2 text-sm font-medium text-gray-900 dark:text-gray-300">Authentication Type</label>
       <select ref={authTypeRef} id="auth_type" className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500" required>
         <option value="OAuth 2.0">OAuth 2.0</option>
         <option value="API Key">API Key</option>
         <option value="Basic Auth">Basic Auth</option>
+      </select>
+    </div>
+    <div>
+      <label for="auth_flow_type" className="block mb-2 text-sm font-medium text-gray-900 dark:text-gray-300">Authorization Flow Type</label>
+      <select ref={authFlowTypeRef} id="auth_flow_type" className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500" required>
+        <option value="auth_code">Authorization Code</option>
+        <option value="client_credentials">Client Credentials</option>
       </select>
     </div>
     <div>

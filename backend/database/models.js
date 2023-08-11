@@ -127,6 +127,10 @@ const App = sequelize.define('App', {
     type: DataTypes.STRING,
     allowNull: false
   },
+  systemName: {
+    type: DataTypes.TEXT,
+    allowNull: false
+  },
   clientId: {
     type: DataTypes.STRING,
     allowNull: false
@@ -136,6 +140,10 @@ const App = sequelize.define('App', {
     allowNull: false
   },
   authType: {
+    type: DataTypes.TEXT,
+    allowNull: false
+  },
+  authFlowType: {
     type: DataTypes.TEXT,
     allowNull: false
   },
@@ -168,6 +176,64 @@ const App = sequelize.define('App', {
     allowNull: true
   }
 
+});
+
+const Documentation = sequelize.define('Documentation', {
+  id: {
+    type: DataTypes.UUID,
+    allowNull: false,
+    primaryKey: true,
+    unique: true,
+    defaultValue: DataTypes.UUIDV4
+  },
+  vecId: {
+    type: DataTypes.UUID,
+    allowNull: true // makes it mandatory
+  },
+  type: {
+    type: DataTypes.STRING,
+    allowNull: false // makes it mandatory
+  },
+  path: {
+    type: DataTypes.STRING,
+    allowNull: false // makes it mandatory
+  },
+  method: {
+    type: DataTypes.STRING,
+    allowNull: false // makes it mandatory
+  },
+  summary: {
+    type: DataTypes.TEXT,
+    allowNull: true // makes it mandatory
+  },
+  botSummary: {
+    type: DataTypes.TEXT,
+    allowNull: true // makes it mandatory
+  },
+  description: {
+    type: DataTypes.TEXT,
+    allowNull: true // makes it mandatory
+  },
+  botDescription: {
+    type: DataTypes.TEXT,
+    allowNull: true // makes it mandatory
+  },
+  specification: {
+    type: DataTypes.JSON,
+    allowNull: false // makes it mandatory
+  },
+  next: {
+    type: DataTypes.JSON, // stores metadata
+    allowNull: true // makes it optional
+  },
+  appId: {
+    type: DataTypes.UUID,
+    references: {
+      model: App,
+      key: 'id'
+    },
+    allowNull: false
+  }
 });
 
 // New UserApp model
@@ -203,6 +269,14 @@ const UserApp = sequelize.define('UserApp', {
   },
   apiKey: {
     type: DataTypes.TEXT,
+    allowNull: true
+  },
+  apiUrl: {
+    type: DataTypes.TEXT,
+    allowNull: true
+  },
+  appUserId: {
+    type: DataTypes.STRING,
     allowNull: true
   },
   expiresAt: {
@@ -260,6 +334,16 @@ UserApp.belongsTo(App, {
 });
 
 
+// App - Documentation relationship
+App.hasMany(Documentation, {
+  onDelete: 'CASCADE', // if an App is deleted, also delete its associated Documentation
+  foreignKey: 'appId'
+});
+Documentation.belongsTo(App, {
+  foreignKey: 'appId'
+});
+
+
 // User - Conversation relationship
 User.hasMany(Conversation, {
   foreignKey: 'userId'
@@ -295,4 +379,4 @@ APIRequest.belongsTo(Conversation, {
 User.hasMany(PasswordResetToken, { foreignKey: 'userId' });
 PasswordResetToken.belongsTo(User, { foreignKey: 'userId' });
 
-export { User, Conversation, Message, APIRequest, App, PasswordResetToken, UserApp };
+export { User, Conversation, Message, APIRequest, App, PasswordResetToken, UserApp, Documentation };

@@ -12,6 +12,7 @@ import 'react-toastify/dist/ReactToastify.css';
 
 const Apps = () => {
    const { user, loading, logout } = useContext(UserContext);
+   const [popupWindow, setPopupWindow] = useState(null);
 
    const customStyles = {
       overlay: {
@@ -32,15 +33,22 @@ const Apps = () => {
     };
 
     const openPopup = (url) => {
+
+      if (popupWindow) {
+        popupWindow.close();
+      }
+
       const width = 600;
       const height = 600;
       const left = window.screen.width / 2 - width / 2;
       const top = window.screen.height / 2 - height / 2;
-      window.open(url, "_blank", `toolbar=no, location=no, directories=no, status=no, menubar=no, scrollbars=no, resizable=no, copyhistory=no, width=${width}, height=${height}, top=${top}, left=${left}`);
-    
+
+      const newWindow = window.open(url, "_blank", `toolbar=no, location=no, directories=no, status=no, menubar=no, scrollbars=no, resizable=no, copyhistory=no, width=${width}, height=${height}, top=${top}, left=${left}`);
+      setPopupWindow(newWindow);
+
       const listenerFunction = function(event) {
         console.log(event.origin);
-        if (event.origin !== `https://24fd-136-29-96-224.ngrok-free.app`) {
+        if (event.origin !== `${"https://2804-136-29-96-224.ngrok-free.app" || process.env.REACT_APP_FRONTEND_URL}`) {
           console.log("no_match");
           return; 
         }
@@ -111,9 +119,8 @@ const Apps = () => {
          app
       }
 
-      if (app.formFields) {
+      if (app.isConnected || app.formFields) {
 
-         console.log(JSON.parse(app.formFields));
          setCurrentApp(app);
          setModalOpen(true);
 
@@ -188,8 +195,8 @@ const Apps = () => {
       contentLabel="Connect to App"
       style={customStyles}
     >
-      {currentApp && currentApp.isConnected === false && <AppConnectForm user={user} app={currentApp} handleConnect={handleConnect} formFields={JSON.parse(currentApp.formFields)} />}
-      {currentApp && currentApp.isConnected === true && <UserAppView user={user} app={currentApp} formFields={JSON.parse(currentApp.formFields)} setModalOpen={setModalOpen} />}
+      {currentApp && currentApp.isConnected === false && <AppConnectForm user={user} app={currentApp} handleConnect={handleConnect} formFields={currentApp.formFields ? JSON.parse(currentApp.formFields) : ""} />}
+      {currentApp && currentApp.isConnected === true && <UserAppView user={user} app={currentApp} formFields={currentApp.formFields ? JSON.parse(currentApp.formFields) : ""} setModalOpen={setModalOpen} />}
     </Modal>
 </>
   );

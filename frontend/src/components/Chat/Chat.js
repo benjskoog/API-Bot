@@ -1,13 +1,15 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useContext } from "react";
 import axios from "axios";
 import BottomInput from './BottomInput';
 import ChatHistory from './ChatHistory';
 import Messages from './Messages';
+import UserContext from '../User/UserContext';
 
 const Chat = () => {
   const [messages, setMessages] = useState([]);
   const [message, setMessage] = useState("");
   const [fetchingResponse, setFetchingResponse] = useState(false);
+  const { user, loading, logout } = useContext(UserContext);
 
   const backendUrl = "http://localhost:3001";
 
@@ -25,7 +27,10 @@ const Chat = () => {
       
       const response = await axios.post(`${backendUrl}/api/chat`, {
         message: query
-      });
+      },
+      {headers: {
+        'Authorization': `Bearer ${user.accessToken}`
+      }});
       
       const botMessage = response.data;
 

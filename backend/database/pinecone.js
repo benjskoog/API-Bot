@@ -17,10 +17,8 @@ const __dirname = dirname(__filename);
 
 if (process.env.NODE_ENV === 'production') {
   dotenv.config({ path: path.resolve(__dirname, '../.env.prod') });
-  console.log("prod")
 } else {
   dotenv.config({ path: path.resolve(__dirname, '../.env') });
-  console.log("dev")
 }
 
 const pinecone = new PineconeClient();
@@ -30,10 +28,10 @@ const init = await pinecone.init({
     apiKey: process.env.PINECONE_API_KEY,
 });
 
-const index = pinecone.Index("cmpbot");
+const index = pinecone.Index("apibot");
 
 const indexDescription = await pinecone.describeIndex({
-  indexName: "cmpbot",
+  indexName: "apibot",
 });
 
 class Pinecone {
@@ -87,7 +85,67 @@ class Pinecone {
       
     }
 
+    async searchByApp(embedding, appName, topK){
+      
+      const queryRequest = {
+        vector: embedding,
+        filter: {
+          "app": {"$eq": appName}
+        },
+        topK: topK,
+        includeValues: false,
+        includeMetadata: true,
+      };
+      const queryResponse = await index.query({ queryRequest });
+    
+      console.log(queryResponse.matches.map(match => match.metadata));
+    
+      return queryResponse;
+    
+  }
+
+  async updateById({ id, embedding, metadata }){
+      
+    const upsert = await index.upsert({ upsertRequest: {
+      vectors: [
+        {
+          id,
+          values: embedding,
+          metadata
+        },
+      ]}
+    });
+  
+  
+    return upsert;
+  
+}
+
+  async deleteVecsForApp(appName){
+      
+    const deleteRequest = await index._delete({ deleteRequest: {
+      filter: {
+        app: { $eq: appName },
+      },
+    }});
+  
+    console.log(deleteRequest);
+  
+    return deleteRequest;
+  
+}
+
+  deleteIndex(){
+      
+    pinecone.deleteIndex("apibot");
+  
+    return "deleted";
+  
+}
+
 
 }
 
-export default Pinecone
+const _pinecone = new Pinecone();
+
+export default _pinecone;

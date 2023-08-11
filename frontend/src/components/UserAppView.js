@@ -8,6 +8,8 @@ function UserAppView({ app, user, setModalOpen }) {
   const [userInputs, setUserInputs] = useState({});
   const [accessToken, setAccessToken] = useState("");
   const [refreshToken, setRefreshToken] = useState("");
+  const [apiUrl, setApiUrl] = useState("");
+  const [appUserId, setAppUserId] = useState("");
   const [expiresAt, setExpiresAt] = useState("");
 
   const backendUrl = "http://localhost:3001";
@@ -66,6 +68,8 @@ function UserAppView({ app, user, setModalOpen }) {
         console.log(app);
         setAccessToken(app.data[0].accessToken);
         setRefreshToken(app.data[0].refreshToken);
+        setApiUrl(app.data[0].apiUrl);
+        setAppUserId(app.data[0].appUserId);
         setExpiresAt(app.data[0].expiresAt);
         setUserInputs(app.data[0].userInputs);
       })
@@ -86,8 +90,16 @@ function UserAppView({ app, user, setModalOpen }) {
             <input value={refreshToken} type="text" id="refreshToken" className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500" placeholder="" readonly></input>
         </div>
         <div>
+            <label for="appUserId" className="block mb-2 text-sm font-medium text-gray-900 dark:text-gray-300">App User ID</label>
+            <input value={appUserId} type="text" id="appUserId" className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500" placeholder="" readonly></input>
+        </div>
+        <div>
+            <label for="apiUrl" className="block mb-2 text-sm font-medium text-gray-900 dark:text-gray-300">apiUrl</label>
+            <input value={apiUrl} type="text" id="apiUrl" className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500" placeholder="" readonly></input>
+        </div>
+        <div>
             <label for="expiresAt" className="block mb-2 text-sm font-medium text-gray-900 dark:text-gray-300">Expires At</label>
-            <input value={expiresAt} type="password" id="expiresAt" className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500" placeholder="" readonly></input>
+            <input value={expiresAt} type="text" id="expiresAt" className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500" placeholder="" readonly></input>
         </div>
         {userInputs && renderUserInputs(userInputs).map((field, index) => (
           <div key={index}>

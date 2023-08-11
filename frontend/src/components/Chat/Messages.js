@@ -24,7 +24,7 @@ const Messages = ({ messages, fetchingResponse }) => {
                 </div>
               </div>
           
-              <p className="flex items-center justify-center">{`Hi! I am Optibot CMP! I can help you interact with the Optimizely CMP`}</p>
+              <p className="flex items-center justify-center">{`Make a request related to one of your connected apps`}</p>
 
         </div>
       </div>
