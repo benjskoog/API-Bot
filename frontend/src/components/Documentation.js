@@ -7,7 +7,7 @@ function Documentation({ documentation, app }) {
   const [botDescription, setBotDescription] = useState(documentation ? documentation.botDescription : '');
   const [next, setNext] = useState(documentation ? documentation.next : '');
 
-  const backendUrl = "http://localhost:3001";
+  const backendUrl = process.env.REACT_APP_BACKEND_URL|| "http://localhost:3001";
 
   useEffect(() => {
     if (documentation) {

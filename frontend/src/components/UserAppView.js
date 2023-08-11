@@ -12,7 +12,7 @@ function UserAppView({ app, user, setModalOpen }) {
   const [appUserId, setAppUserId] = useState("");
   const [expiresAt, setExpiresAt] = useState("");
 
-  const backendUrl = "http://localhost:3001";
+  const backendUrl = process.env.REACT_APP_BACKEND_URL|| "http://localhost:3001";
 
   const handleInputChange = (event, field) => {
     setUserInputs({

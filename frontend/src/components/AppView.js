@@ -27,7 +27,7 @@ const customStyles = {
 
 const AppView = ({ mode }) => {
   const { appId } = useParams();
-  const backendUrl = "http://localhost:3001";
+  const backendUrl = process.env.REACT_APP_BACKEND_URL|| "http://localhost:3001";
   const navigate = useNavigate();
   const { user, loading, logout } = useContext(UserContext);
 

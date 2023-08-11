@@ -72,7 +72,7 @@ const Apps = () => {
    const [apps, setApps] = useState([]);
    const [modalOpen, setModalOpen] = useState(false);
    const [currentApp, setCurrentApp] = useState(null); // current app to connect
-   const backendUrl = "http://localhost:3001";
+   const backendUrl = process.env.REACT_APP_BACKEND_URL|| "http://localhost:3001";
 
    useEffect(() => {
       if (!user || !user.accessToken) return;
