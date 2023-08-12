@@ -79,7 +79,8 @@ const Apps = () => {
    
       axios.get(`${backendUrl}/api/apps`, {
         headers: {
-          'Authorization': `Bearer ${user.accessToken}`
+          'Authorization': `Bearer ${user.accessToken}`,
+          "ngrok-skip-browser-warning":"any"
         }
       })
       .then(response => {
@@ -100,7 +101,8 @@ const Apps = () => {
       try {
           const response = await axios.post(`${backendUrl}/api/handle-connect/${app.id}`, userAppData, {
             headers: {
-              'Authorization': `Bearer ${user.accessToken}`
+              'Authorization': `Bearer ${user.accessToken}`,
+              "ngrok-skip-browser-warning":"any"
             }
           });
           const { authUrl } = response.data;

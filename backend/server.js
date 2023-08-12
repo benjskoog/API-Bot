@@ -41,12 +41,32 @@ const indexDescription = pinecone.indexDescription;
 const app = express();
 const router = express.Router();
 
+const corsOptions = {
+  origin: 'https://apibot-dfor.onrender.com',
+  optionsSuccessStatus: 200,
+  allowedHeaders: ['Content-Type', 'Authorization'],
+};
+
+app.use(cors(corsOptions));
+
 const JWT_SECRET = process.env.JWT_SECRET_KEY;
 
-app.use(bodyParser.json({ limit: "10mb" })); // You can set the limit to any appropriate size.
+app.use(bodyParser.json({ limit: "10mb" }));
 app.use(bodyParser.urlencoded({ extended: true, limit: "10mb" }));
-app.use(cors());
 app.use(express.json());
+
+app.use((req, res, next) => {
+  console.log(res.get('Access-Control-Allow-Origin'));
+  next();
+});
+
+app.use((req, res, next) => {
+  res.header('ngrok-skip-browser-warning', "any");
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  next();
+});
 
 const port = process.env.PORT || 3001;
 
@@ -274,11 +294,13 @@ async function fulfillRequest(userRequest, documentation, numPass, apiRequest, s
 
         const apiDocumentation = buildApiDocumentation([relevantDocs.matches[bestMatch]], "full", documentation);
 
+        console.log([relevantDocs.matches[bestMatch]]);
+
         alteredRequest = buildApiPrompt(userRequest, true, apiDocumentation, selectedApp, userApp, "full");
 
         // Uncomment line below to return API documentation in chat for testing purposes
 
-        return alteredRequest;
+        // return alteredRequest;
 
         const apiCall = await openai.getAPICall(alteredRequest, selectedApp, userApp, userId);
 

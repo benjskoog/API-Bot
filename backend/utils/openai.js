@@ -74,7 +74,7 @@ class OpenAI {
         this.getAPIcallFunctions = [{
 
             "name": "callAppAPI",
-            "description": "Use this function to call the App API",
+            "description": "Use this function to call the App API. Please include the body if the request method is POST",
             "parameters": {
               "type": "object",
               "properties": {
@@ -370,7 +370,7 @@ class OpenAI {
       
           prompt = `The user has requested to retrieve data. Here is a brief overview of the data retrieved: \n\n ${JSON.stringify(responseData, null, 2)} \n\n How would you format this response for the user?`;
         } else {
-          prompt = `The user has requested a ${method} request. Here is the response: \n ${apiResponse} \n How would you format this response for the user?`;
+          prompt = `The user has requested a ${method} request. Here is the response: \n ${JSON.stringify(apiResponse, null, 2)} \n How would you format this response for the user?`;
         }
 
         const inputString = this.returnResponseSystemMessage + prompt;
