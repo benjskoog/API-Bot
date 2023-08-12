@@ -1,10 +1,8 @@
 import React, { useState } from 'react';
-import axios from 'axios';
+import api from "../Api.js"
 
 function AppConnectForm({ app, formFields, user, handleConnect }) {
   const [formInputs, setFormInputs] = useState({});
-
-  const backendUrl = process.env.REACT_APP_BACKEND_URL|| "http://localhost:3001";
 
   console.log(formFields)
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext } from "react";
-import axios from "axios";
+import api from "../../Api.js"
 import BottomInput from './BottomInput';
 import ChatHistory from './ChatHistory';
 import Messages from './Messages';
@@ -10,8 +10,6 @@ const Chat = () => {
   const [message, setMessage] = useState("");
   const [fetchingResponse, setFetchingResponse] = useState(false);
   const { user, loading, logout } = useContext(UserContext);
-
-  const backendUrl = "http://localhost:3001";
 
   const handleFormSubmit = async ({ query }) => {
 
@@ -25,7 +23,7 @@ const Chat = () => {
     try {
       setFetchingResponse(true);
       
-      const response = await axios.post(`${backendUrl}/api/chat`, {
+      const response = await api.post('/chat', {
         message: query
       },
       {headers: {

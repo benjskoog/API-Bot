@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from "../Api.js"
 import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
@@ -11,8 +11,6 @@ function UserAppView({ app, user, setModalOpen }) {
   const [apiUrl, setApiUrl] = useState("");
   const [appUserId, setAppUserId] = useState("");
   const [expiresAt, setExpiresAt] = useState("");
-
-  const backendUrl = process.env.REACT_APP_BACKEND_URL|| "http://localhost:3001";
 
   const handleInputChange = (event, field) => {
     setUserInputs({
@@ -42,7 +40,7 @@ function UserAppView({ app, user, setModalOpen }) {
     event.preventDefault();
 
     try {
-        const response = await axios.delete(`${backendUrl}/api/user-app/${app.id}`, {
+        const response = await api.delete(`/user-app/${app.id}`, {
             headers: {
               'Authorization': `Bearer ${user.accessToken}`
             }
@@ -59,7 +57,7 @@ function UserAppView({ app, user, setModalOpen }) {
   };
 
   useEffect(() => {
-    axios.get(`${backendUrl}/api/user-app/${app.id}`, {
+    api.get(`/user-app/${app.id}`, {
         headers: {
           'Authorization': `Bearer ${user.accessToken}`
         }

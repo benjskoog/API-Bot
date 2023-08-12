@@ -1,6 +1,6 @@
 import React, { useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import api from "../Api.js"
 import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
@@ -18,8 +18,6 @@ const NewApp = ({ currentPath }) => {
   const logoURLRef = useRef();
   const websiteRef = useRef();
   const formFieldsRef = useRef();
-
-  const backendUrl = process.env.REACT_APP_BACKEND_URL|| "http://localhost:3001";
 
   let navigate = useNavigate();
 
@@ -55,7 +53,7 @@ const NewApp = ({ currentPath }) => {
     console.log(appData);
   
     try {
-      const response = await axios.post(`${backendUrl}/api/app`, appData);
+      const response = await api.post('/app', appData);
       console.log(response.data);
       
       // Show success message

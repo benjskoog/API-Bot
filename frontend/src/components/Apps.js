@@ -2,7 +2,7 @@ import React, { useEffect, useState, useContext, useRef } from 'react';
 import { BrowserRouter as Router, Route, Routes, useLocation, Link } from 'react-router-dom';
 import NavBarLogo from './NavBarLogo';
 import Chat from './Chat/Chat';
-import axios from 'axios';
+import api from "../Api.js"
 import Modal from 'react-modal';
 import UserContext from './User/UserContext';
 import AppConnectForm from './AppConnectForm';
@@ -72,15 +72,13 @@ const Apps = () => {
    const [apps, setApps] = useState([]);
    const [modalOpen, setModalOpen] = useState(false);
    const [currentApp, setCurrentApp] = useState(null); // current app to connect
-   const backendUrl = process.env.REACT_APP_BACKEND_URL|| "http://localhost:3001";
 
    useEffect(() => {
       if (!user || !user.accessToken) return;
    
-      axios.get(`${backendUrl}/api/apps`, {
+      api.get('/apps', {
         headers: {
-          'Authorization': `Bearer ${user.accessToken}`,
-          "ngrok-skip-browser-warning":"any"
+          'Authorization': `Bearer ${user.accessToken}`
         }
       })
       .then(response => {
@@ -99,10 +97,9 @@ const Apps = () => {
       console.log(app);
   
       try {
-          const response = await axios.post(`${backendUrl}/api/handle-connect/${app.id}`, userAppData, {
+          const response = await api.post(`/handle-connect/${app.id}`, userAppData, {
             headers: {
-              'Authorization': `Bearer ${user.accessToken}`,
-              "ngrok-skip-browser-warning":"any"
+              'Authorization': `Bearer ${user.accessToken}`
             }
           });
           const { authUrl } = response.data;

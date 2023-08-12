@@ -1,5 +1,5 @@
 import React, { useState, useContext } from 'react';
-import axios from 'axios';
+import api from "../../Api.js"
 import UserContext from './UserContext';
 import { Navigate } from 'react-router-dom';
 
@@ -15,7 +15,6 @@ function UserSettings() {
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
-  const backendUrl = process.env.REACT_APP_BACKEND_URL|| "http://localhost:3001";
 
   const handleCheckboxChange = () => {
     setShowPasswordFields(!showPasswordFields);
@@ -27,7 +26,7 @@ function UserSettings() {
     if (showPasswordFields && newPassword !== '' && newPassword === confirmNewPassword) {
       updateUser.password = newPassword;
       try {
-        const response = await axios.put(`${backendUrl}/update-password`, {
+        const response = await api.put('/update-password', {
           email: user.email,
           newPassword: newPassword
         });
@@ -56,7 +55,7 @@ function UserSettings() {
     }
 
     try {
-      const response = await axios.put(`${backendUrl}/update-profile`, {
+      const response = await api.put('/update-profile', {
         email: user.email,
         ...updateUser
       });

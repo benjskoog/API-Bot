@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useContext, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import axios from 'axios';
+import api from "../Api.js"
 import UserContext from './User/UserContext';
 import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
@@ -27,7 +27,6 @@ const customStyles = {
 
 const AppView = ({ mode }) => {
   const { appId } = useParams();
-  const backendUrl = process.env.REACT_APP_BACKEND_URL|| "http://localhost:3001";
   const navigate = useNavigate();
   const { user, loading, logout } = useContext(UserContext);
 
@@ -88,7 +87,7 @@ const AppView = ({ mode }) => {
       formFields
     };
 
-    axios.patch(`${backendUrl}/api/app/${appId}`, updatedApp)
+    api.patch(`/app/${appId}`, updatedApp)
       .then((response) => {
         toast('App data saved successfully!', { type: 'success', position: 'top-center', autoClose: 1000, pauseOnHover: false });
       })
@@ -101,9 +100,9 @@ const AppView = ({ mode }) => {
   const handleCreateDocumentation = (event) => {
     event.preventDefault();
 
-    axios.post(`${backendUrl}/api/docs/${appId}`, null, {
+    api.post(`/docs/${appId}`, null, {
       headers: {
-        'Authorization': `Bearer ${user.accessToken}`
+        'Authorization': `Bearer ${user.accessToken}`,
       }
     })
       .then((response) => {
@@ -126,7 +125,7 @@ const AppView = ({ mode }) => {
   const handleDeleteDocumentation = (event) => {
     event.preventDefault();
   
-    axios.delete(`${backendUrl}/api/docs/${app.id}`)
+    api.delete(`/docs/${app.id}`)
       .then((response) => {
 
         console.log(response);
@@ -156,7 +155,7 @@ const AppView = ({ mode }) => {
   
 
   useEffect(() => {
-    axios.get(`${backendUrl}/api/app/${appId}`)
+    api.get(`/app/${appId}`)
       .then(response => {
         const app = response.data;
         setApp(app);
@@ -181,7 +180,7 @@ const AppView = ({ mode }) => {
   }, []);
 
   useEffect(() => {
-    axios.get(`${backendUrl}/api/docs/${appId}`)
+    api.get(`/docs/${appId}`)
       .then(response => {
         console.log(response.data)
         setDocumentationRecords(response.data);

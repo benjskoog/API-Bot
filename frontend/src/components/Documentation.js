@@ -1,13 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from "../Api.js"
 
 function Documentation({ documentation, app }) {
   const [docType, setDocType] = useState(documentation ? documentation.type : '');
   const [botSummary, setBotSummary] = useState(documentation ? documentation.botSummary : '');
   const [botDescription, setBotDescription] = useState(documentation ? documentation.botDescription : '');
   const [next, setNext] = useState(documentation ? documentation.next : '');
-
-  const backendUrl = process.env.REACT_APP_BACKEND_URL|| "http://localhost:3001";
 
   useEffect(() => {
     if (documentation) {
@@ -24,7 +22,7 @@ function Documentation({ documentation, app }) {
 
   const handleUpdate = async () => {
     try {
-      const response = await axios.patch(`${backendUrl}/api/docs/${documentation.id}`, {
+      const response = await api.patch(`/docs/${documentation.id}`, {
         botSummary,
         botDescription,
         next,

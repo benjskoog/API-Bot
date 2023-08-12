@@ -42,9 +42,9 @@ const app = express();
 const router = express.Router();
 
 const corsOptions = {
-  origin: 'https://apibot-dfor.onrender.com',
+  origin: true,
   optionsSuccessStatus: 200,
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: ['Content-Type', 'Authorization', "ngrok-skip-browser-warning"],
 };
 
 app.use(cors(corsOptions));

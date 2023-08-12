@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import axios from 'axios';
+import api from "../../Api.js"
 
 function ForgotPassword() {
   const [email, setEmail] = useState('');
@@ -8,9 +8,8 @@ function ForgotPassword() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const backendUrl = process.env.REACT_APP_BACKEND_URL|| "http://localhost:3001";
       const frontendUrl = process.env.REACT_APP_FRONTEND_URL || "http://localhost:3000";
-      const response = await axios.post(`${backendUrl}/api/forgot-password`, { email, frontendUrl });
+      const response = await api.post('/forgot-password', { email, frontendUrl });
       setMessage(response.data.message);
     } catch (error) {
       console.error('Error sending reset email:', error);

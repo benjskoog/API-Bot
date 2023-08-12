@@ -1,5 +1,6 @@
 import React, { useState, useContext } from 'react';
 import axios from 'axios';
+import api from "../../Api.js"
 import UserContext from '../User/UserContext';
 import { Navigate } from 'react-router-dom';
 
@@ -10,12 +11,11 @@ function Register() {
   const [passwordConfirmation, setPasswordConfirmation] = useState('');
   const [loggedIn, setLoggedIn] = useState(false);
   const { setUser } = useContext(UserContext);
-  const backendUrl = process.env.REACT_APP_BACKEND_URL || "http://localhost:3001";
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const response = await axios.post(`${backendUrl}/api/register`, {
+      const response = await api.post('/register', {
         email,
         password,
         passwordConfirmation

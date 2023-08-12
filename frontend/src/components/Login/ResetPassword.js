@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useLocation, useNavigate  } from 'react-router-dom';
-import axios from 'axios';
+import api from "../../Api.js"
 
 function ResetPassword() {
     const [password, setPassword] = useState('');
@@ -13,7 +13,6 @@ function ResetPassword() {
     const location = useLocation();
     const searchParams = new URLSearchParams(location.search);
     const token = searchParams.get('token');
-    const backendUrl = process.env.REACT_APP_BACKEND_URL|| "http://localhost:3001";
   
     const handleSubmit = async (e) => {
       e.preventDefault();
@@ -23,7 +22,7 @@ function ResetPassword() {
       }
       try {
         console.log(token)
-        const response = await axios.post(`${backendUrl}/api/reset-password`, { token, password });
+        const response = await api.post('/reset-password', { token, password });
         setMessage(response.data.message);
       } catch (error) {
         console.error('Error resetting password:', error);
