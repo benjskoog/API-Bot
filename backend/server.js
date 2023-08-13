@@ -56,12 +56,6 @@ app.use(bodyParser.urlencoded({ extended: true, limit: "10mb" }));
 app.use(express.json());
 
 app.use((req, res, next) => {
-  console.log(res.get('Access-Control-Allow-Origin'));
-  next();
-});
-
-app.use((req, res, next) => {
-  res.header('ngrok-skip-browser-warning', "any");
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE');
   res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
@@ -238,6 +232,7 @@ async function fulfillRequest(userRequest, documentation, numPass, apiRequest, s
 
   try {
 
+    // Gets userApp from db
     const userApp = await UserApp.findOne({
       where: {
         userId,
@@ -251,6 +246,8 @@ async function fulfillRequest(userRequest, documentation, numPass, apiRequest, s
 
     let searchString = apiRequest ? apiRequest : userRequest;
 
+
+    // Retrieve relevant API paths for the selected app
     const relevantDocs = await similaritySearch(searchString, selectedApp.name, 4);
 
     console.log(relevantDocs);
@@ -261,6 +258,8 @@ async function fulfillRequest(userRequest, documentation, numPass, apiRequest, s
     let alteredRequest;
     const cannotFulfillRequest = "I am sorry, I cannot help with this request right now. Is there anything else I can help you with?";
 
+
+    // Checks to see if the API documentation retrieval is relevant
     if (relevantDocs.matches[0].score > minScore) {
 
       // Builds API documentation based on similaritySearch results
@@ -278,12 +277,14 @@ async function fulfillRequest(userRequest, documentation, numPass, apiRequest, s
 
     }
     
+    // GPT to decide whether to call the API endpoint or ask the user for more information
     const decision = await openai.decide(alteredRequest);
 
     console.log(JSON.stringify(decision));
 
     const decisionArgs = decision.args;
 
+    // Checks if GPT called a function
     if (decisionArgs) {
 
       if (decision.func_name === "chooseAPIEndpoint") {
@@ -292,16 +293,20 @@ async function fulfillRequest(userRequest, documentation, numPass, apiRequest, s
 
         console.log(bestMatch);
 
+
+        // Expands documentation for the selected endpoint
         const apiDocumentation = buildApiDocumentation([relevantDocs.matches[bestMatch]], "full", documentation);
 
         console.log([relevantDocs.matches[bestMatch]]);
 
+        // Builds prompt that GPT will use to call the API endpoint
         alteredRequest = buildApiPrompt(userRequest, true, apiDocumentation, selectedApp, userApp, "full");
 
         // Uncomment line below to return API documentation in chat for testing purposes
 
         // return alteredRequest;
 
+        // GPT builds API request
         const apiCall = await openai.getAPICall(alteredRequest, selectedApp, userApp, userId);
 
         const apiArgs = apiCall.args;
@@ -340,7 +345,7 @@ async function fulfillRequest(userRequest, documentation, numPass, apiRequest, s
 
   } catch (error) {
     console.error(`Failed to fulfill request: ${error.message}`);
-    throw error;  // re-throw the error if you want to handle it at the caller side, or return a default response.
+    throw error;
   }
 
 }
@@ -389,7 +394,6 @@ router.post("/chat", authenticate, async (req, res) => {
     const appDecision = await openai.selectApp(userMessage, userAppsString);
 
     // GPT to optimize request for similarity search
-
     let optimizedRequest = await openai.optimizeRequest(userMessage);
 
     optimizedRequest = optimizedRequest.response;
@@ -397,34 +401,17 @@ router.post("/chat", authenticate, async (req, res) => {
     let selectedApp;
     let documentation;
 
+    // Filter userApps array based on the app selected by GPT
     if (appDecision.args) {
       selectedApp = appDecision.args.app;
       selectedApp = userApps.filter(app => app.name === selectedApp)[0];
       console.log(selectedApp.documentationUrl);
 
-      // Test block auth refresh for Asana
-
-/*       const handleApp = appManager.getApp(selectedApp);
-
-      const userApp = await UserApp.findOne({
-        where: {
-          userId,
-          appId: selectedApp.id,
-        }
-      });
-
-      const apiResponse = await handleApp.callAppAPI("GET", "/rest/api/3/project", "" , "https://api.atlassian.com/ex/jira/83447faa-d20d-4838-bbe4-8a3efcaf4955", userApp);
-
-      return(apiResponse); */
-
-      // Test block end
-
-      // delete vectors for selected docs with line below
-
-      // const deleteAsanaDocs = await pinecone.deleteVecsForApp(selectedApp.name);
-
+      
+      // Initialize app handler. App handler performs all actions related to the app
       const handleApp = appManager.getApp(selectedApp);
 
+      // Load the API documentation for the app
       const documentation = await handleApp.loadDocumentation();
 
       const chatResponse = await fulfillRequest(optimizedRequest, documentation, null, null, selectedApp, userId);

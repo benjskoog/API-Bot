@@ -46,38 +46,38 @@ class App {
         
     }
 
-    async callAppAPI(method, path, body, baseApiUrl, userApp, tried) {
+  async callAppAPI(method, path, body, baseApiUrl, userApp, tried) {
 
-      const apiUrl = `${baseApiUrl}${path}`
-    
-      const headers = {
-        "authorization": `Bearer ${userApp.accessToken}`,
-        "accept": "application/json",
-        "connection": "keep-alive"
-      };
-    
-      console.log(JSON.stringify({method, apiUrl, headers, body}));
-    
-      try {
-          const response = await axios({
-              method,
-              url: apiUrl,
-              headers,
-              data: body
-          });
-    
-          console.log(response.data);
-          
-          return response.data;
-      } catch (error) {
+    const apiUrl = `${baseApiUrl}${path}`
+  
+    const headers = {
+      "authorization": `Bearer ${userApp.accessToken}`,
+      "accept": "application/json",
+      "connection": "keep-alive"
+    };
+  
+    console.log(JSON.stringify({method, apiUrl, headers, body}));
+  
+    try {
+        const response = await axios({
+            method,
+            url: apiUrl,
+            headers,
+            data: body
+        });
+  
+        console.log(response.data);
+        
+        return response.data;
+    } catch (error) {
 
-          console.log(error);
+        console.log(error);
 
-          return null;
-      }
+        return null;
     }
+  }
 
-    async refreshAuth(userApp) {
+  async refreshAuth(userApp) {
 
       const app = await UserApp.findOne({ where: { id: userApp.id } });
 
@@ -112,7 +112,7 @@ class App {
       
   }
     
-    async Authenticate() {
+  async Authenticate() {
 
       try {
         // exchange code for access token
