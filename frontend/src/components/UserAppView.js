@@ -4,7 +4,7 @@ import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
 function UserAppView({ app, user, setModalOpen }) {
-  // used to render additional fields
+
   const [userInputs, setUserInputs] = useState({});
   const [accessToken, setAccessToken] = useState("");
   const [refreshToken, setRefreshToken] = useState("");
