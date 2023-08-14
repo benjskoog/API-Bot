@@ -9,7 +9,7 @@ import { get_encoding, encoding_for_model } from "@dqbd/tiktoken";
 import bodyParser from "body-parser";
 import { v4 as uuidv4 } from 'uuid'; // Add this import at the top
 import { PineconeClient } from "@pinecone-database/pinecone";
-import { User, Conversation, Message, APIRequest, App as App_sql, UserApp, Documentation } from '../../database/models.js';
+import { User, Conversation, Message, Request, App as App_sql, UserApp, Documentation } from '../../database/models.js';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import path from 'path';
@@ -23,6 +23,141 @@ if (process.env.NODE_ENV === 'production') {
   dotenv.config({ path: path.resolve(__dirname, '../.env.prod') });
 } else {
   dotenv.config({ path: path.resolve(__dirname, '../.env') });
+}
+
+const resolveRef = (schema, root) => {
+
+  if (JSON.stringify(schema, null, 2).length > 3000) return schema;
+
+  if (typeof schema !== 'object' || schema === null) return schema;
+  if ('$ref' in schema) {
+      const refPath = schema.$ref.split('/');
+      let ref = root;
+      for (const part of refPath) {
+          if (part === '#') continue;
+          ref = ref[part];
+      }
+      let resolved = resolveRef(ref, root);
+      // If resolution failed due to token limit, return the original schema instead of partially resolved
+      if (JSON.stringify(resolved, null, 2).length > 3000) return schema;
+      return resolved;
+  }
+
+  for (const key of Object.keys(schema)) {
+      let resolved = resolveRef(schema[key], root);
+      // If resolution failed due to token limit, keep the original key-value pair instead of partially resolved
+      if (JSON.stringify(resolved, null, 2).length > 3000) continue;
+      schema[key] = resolved;
+  }
+
+  return schema;
+}
+
+const buildApiDocumentation = (searchResults, docType, documentation) => {
+
+  // docType should be "full" or "summary"
+  const { paths } = documentation;
+
+  // Initialize an empty array to hold the documentation strings
+  let documentationStrings = [];
+
+  try {
+
+    searchResults.forEach(match => {
+      const { metadata } = match;
+      const { method, path } = metadata;
+
+      // Find the corresponding path and method in the API documentation
+      if (paths[path] && paths[path][method]) {
+        let endpointInfo = paths[path][method];
+
+        // Resolve the $ref in the endpoint info
+
+        try {
+          endpointInfo = resolveRef(endpointInfo, documentation);
+        } catch (err) {
+          `Failed to resolve base schema: ${err.message}`
+        }
+
+        let docString = `
+          Path: ${path}
+          Method: ${method.toUpperCase()}
+          Summary: ${endpointInfo.summary}
+          Description: ${endpointInfo.description}
+        `;
+
+        if (endpointInfo.parameters && docType === 'full') {
+          // Resolve $refs in parameters
+          const resolvedParameters = endpointInfo.parameters.map(param => resolveRef(param, documentation));
+          docString += `
+          Parameters: ${JSON.stringify(resolvedParameters, null, 2)}
+          `;
+        }
+
+        if (endpointInfo.requestBody && docType === 'full') {
+          docString += `
+          Request Body: ${JSON.stringify(endpointInfo.requestBody, null, 2)}
+          `;
+        }
+
+        documentationStrings.push(docString);
+      }
+    });
+    
+  } catch (err) {
+    console.error(`Failed to build API documentation: ${err.message}`);
+  }
+
+  const totalDocumentationString = documentationStrings.join("\n\n----------------------\n\n");
+
+  return totalDocumentationString;
+};
+
+async function similaritySearch(userRequest, appName,topK){
+
+  const embedding = await openai.createEmbedding(userRequest);
+
+  const queryResponse = await pinecone.searchByApp(embedding, appName, topK);
+
+  return queryResponse;
+
+}
+
+function buildApiPrompt(userRequest, supported, apiDocumentation, userApp, type) {
+
+  const today = new Date();
+  const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+
+  let prompt;
+
+  if (supported === true){
+
+    if (type === "summary") {
+
+      prompt = `The following is a user's request to interact with ${this.name} on ${dateStr}. \n`;
+
+      prompt += `User request: ${userRequest} \n`;
+
+      prompt += "Read the user's request carefully and select the most relevant endpoint below. Check your work: \n";
+  
+      // userApp ? prompt += ` The user's ID in ${selectedApp.name} is ${userApp.appUserId}. Only use this where the documentation states to explicitly use the user's ID. \n` : "";
+
+    } else {
+      prompt += `Here is API documentation you can use to call ${this.name}'s API: \n`
+    }
+
+    prompt += `${apiDocumentation} \n`;
+
+  } else {
+
+    prompt = prompt + `The request is not supported by the API. Please inform the user. You can also answer their question if it is unrelated to the platform or the API.`;
+
+  }
+
+  console.log(prompt);
+
+  return prompt;
+  
 }
 
 
@@ -45,8 +180,10 @@ class App {
       this.formFields = app.formFields;
         
     }
-
-  async callAppAPI(method, path, body, baseApiUrl, userApp, tried) {
+  
+    
+    // Tools for GPT
+  async callAPI(method, path, body, baseApiUrl, userApp, tried) {
 
     const apiUrl = `${baseApiUrl}${path}`
   
@@ -77,6 +214,96 @@ class App {
     }
   }
 
+  async searchAPI(userRequest, documentation, numPass, apiRequest, userId) {
+
+    try {
+  
+      // Gets userApp from db
+      const userApp = await UserApp.findOne({
+        where: {
+          userId,
+          appId: this.id,
+        }
+      });
+  
+      let searchString = apiRequest ? apiRequest : userRequest;
+  
+  
+      // Retrieve relevant API paths for the selected app
+      const relevantDocs = await similaritySearch(searchString, this.name, 4);
+  
+      console.log(relevantDocs);
+  
+      // Check the similarity score of the highest scored doc for relevancy
+      const minScore = 0.70;
+      let apiDocumentation = "";
+      let requestedDocs;
+      const cannotFulfillRequest = "I am sorry, I cannot help with this request right now. Is there anything else I can help you with?";
+  
+  
+      // Checks to see if the API documentation retrieval is relevant
+      if (relevantDocs.matches[0].score > minScore) {
+  
+        // Builds API documentation based on similaritySearch results
+        const apiEndpoints = buildApiDocumentation(relevantDocs.matches, "summary", documentation)
+  
+        requestedDocs = buildApiPrompt(userRequest, true, apiEndpoints, userApp, "summary");
+  
+      } else {
+  
+        requestedDocs = buildApiPrompt(userRequest, false);
+  
+        const unsupportedResponse = openai.returnUnsupported(requestedDocs, "api");
+  
+        return unsupportedResponse
+  
+      }
+      
+      // GPT to decide whether to call the API endpoint or ask the user for more information
+      const decision = await openai.chooseEndpoint(requestedDocs);
+  
+      console.log(JSON.stringify(decision));
+  
+      const decisionArgs = decision.args;
+  
+      // Checks if GPT called a function
+      if (decisionArgs) {
+  
+        if (decision.func_name === "chooseAPIEndpoint") {
+  
+          const bestMatch = decisionArgs.order;
+  
+          console.log(bestMatch);
+  
+  
+          // Expands documentation for the selected endpoint
+          const apiDocumentation = buildApiDocumentation([relevantDocs.matches[bestMatch]], "full", documentation);
+  
+          console.log([relevantDocs.matches[bestMatch]]);
+  
+          // Builds prompt that GPT will use to call the API endpoint
+          requestedDocs = buildApiPrompt(userRequest, true, apiDocumentation, userApp, "full");
+  
+          // Uncomment line below to return API documentation in chat for testing purposes
+  
+          return requestedDocs;
+  
+        } else {
+  
+          return cannotFulfillRequest;
+  
+        }
+  
+      }
+  
+    } catch (error) {
+      console.error(`Failed to fulfill request: ${error.message}`);
+      throw error;
+    }
+  
+  }
+
+  // Methods for auth and API documentation management
   async refreshAuth(userApp) {
 
       const app = await UserApp.findOne({ where: { id: userApp.id } });

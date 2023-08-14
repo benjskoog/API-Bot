@@ -7,7 +7,7 @@ import { Configuration, OpenAIApi } from "openai";
 import { get_encoding, encoding_for_model } from "@dqbd/tiktoken";
 import bodyParser from "body-parser";
 import { PineconeClient } from "@pinecone-database/pinecone";
-import { User, Conversation, Message, APIRequest } from '../database/models.js';
+import { User, Conversation, Message, Request } from '../database/models.js';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import path from 'path';
@@ -39,7 +39,7 @@ const printTokens = (stringsArray) => {
 class OpenAI {
     constructor() {
 
-        this.decideFunctions = [
+        this.chooseEndpointFunctions = [
           {
             "name": "chooseAPIEndpoint",
             "description": "From the provided endpoints, select the relevant API endpoint by calling this function.",
@@ -53,25 +53,10 @@ class OpenAI {
               },
               "required": ["order"]
             }
-          },
-          {
-            "name": "getMoreInfo",
-            "description": "If you are missing required for the API request, call this function to ask the user for the information",
-            "parameters": {
-              "type": "object",
-              "properties": {
-                "question": {
-                    "type": "string",
-                    "description": "Ask for the required information."
-                }
-              },
-              "required": ["question"]
-            }
-          }
-        
+          }       
         ]
 
-        this.getAPIcallFunctions = [{
+          this.getAPIcallFunctions = [{
 
             "name": "callAppAPI",
             "description": "Use this function to call the App API. Please include the body if the request method is POST",
@@ -94,7 +79,113 @@ class OpenAI {
               },
               "required": ["method", "path"]
             }
+          },
+          {
+            "name": "queryUser",
+            "description": "Query the user for additional information about their request.",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Ask for the required information."
+                }
+              },
+              "required": ["query"]
+            }
           }]
+
+          this.requestAgentInitializeFuncs = [
+            {
+            "name": "addTasks",
+            "description": "Add tasks to your to-do list. Include the functions you need for each task.",
+            "parameters": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "task": {
+                    "type": "string",
+                    "description": "Description of the task"
+                  },
+                  "functions": {
+                    "type": "array",
+                    "description": "Items should be the name of the function (string)."
+                  }         
+                },
+                "required": ["task"]
+              },
+            }
+          }]
+
+          this.requestAgentFunctions = [
+            {
+
+              "name": "callAppAPI",
+              "description": "Use this function to call the App API. Please include the body if the request method is POST",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "method": {
+                    "type": "string",
+                    "description": "The HTTP method to call. Accepts GET, POST, PUT, PATCH, DELETE."
+                  },
+                  "path": {
+                    "type": "string",
+                    "description": "The API path. Will be appended to the base API URL. Include path parameters and query parameters where appropriate."
+                  },
+                  "body": {
+                    "type": "object",
+                    "description": "The JSON request body to be sent with the API request. Required for certain endpoints."
+                  }
+                  
+                },
+                "required": ["method", "path"]
+              }
+            },
+          {
+            "name": "searchAppAPI",
+            "description": "You can use this tool to search the app's API using natural language. It will return relevant documentation. Example 'I need a list of templates'.",
+            "parameters": {
+              "type": "object",
+              "searchQuery": {
+                "method": {
+                  "type": "string",
+                  "description": "Your natural language search"
+                }
+                },
+              "required": ["searchQuery"]
+            }
+          },
+          {
+            "name": "queryUser",
+            "description": "Query the user for additional information about their request.",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Ask for the required information."
+                }
+              },
+              "required": ["query"]
+            }
+          },
+          {
+            "name": "completeTask",
+            "description": "Mark your current task as completed.",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "complete": {
+                    "type": "boolean",
+                    "description": "Value should be true if the task is completed"
+                }
+              },
+              "required": ["complete"]
+            }
+          }
+        ]
 
           this.selectAppFunction = [{
 
@@ -258,7 +349,7 @@ class OpenAI {
 
     }
 
-    async decide(request) {
+    async chooseEndpoint(request) {
 
         const inputString = this.decideSystemMessage;
 
@@ -270,7 +361,7 @@ class OpenAI {
             model: "gpt-3.5-turbo",
             messages: [ 
             {role: "user", content: request}],
-            functions: this.decideFunctions
+            functions: this.chooseEndpointFunctions
         });
 
         if (decision.data.choices[0].message.function_call) {

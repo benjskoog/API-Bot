@@ -8,7 +8,7 @@ import openai from "../openai.js";
 import { get_encoding, encoding_for_model } from "@dqbd/tiktoken";
 import bodyParser from "body-parser";
 import { PineconeClient } from "@pinecone-database/pinecone";
-import { User, Conversation, Message, APIRequest, App as App_sql, UserApp, Documentation } from '../../database/models.js';
+import { User, Conversation, Message, Request, App as App_sql, UserApp, Documentation } from '../../database/models.js';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import path from 'path';
@@ -29,7 +29,8 @@ class Salesforce extends App {
     constructor(app) {
         super(app)   
     }
-
+      
+    // Methods for auth and API documentation management
     async createDocumentation(documentationUrl, appName, userApp) {
 
         const domainUrl = await this.getDomainUrl(userApp.userInputs);

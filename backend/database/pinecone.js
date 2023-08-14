@@ -7,7 +7,7 @@ import { Configuration, OpenAIApi } from "openai";
 import { get_encoding, encoding_for_model } from "@dqbd/tiktoken";
 import bodyParser from "body-parser";
 import { PineconeClient } from "@pinecone-database/pinecone";
-import { User, Conversation, Message, APIRequest } from './models.js';
+import { User, Conversation, Message, Request } from './models.js';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path'
 import path from 'path';

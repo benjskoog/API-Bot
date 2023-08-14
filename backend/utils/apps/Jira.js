@@ -7,7 +7,7 @@ import { Configuration, OpenAIApi } from "openai";
 import { get_encoding, encoding_for_model } from "@dqbd/tiktoken";
 import bodyParser from "body-parser";
 import { PineconeClient } from "@pinecone-database/pinecone";
-import { User, Conversation, Message, APIRequest } from '../../database/models.js';
+import { User, Conversation, Message, Request } from '../../database/models.js';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import path from 'path';
@@ -27,50 +27,51 @@ class Jira extends App {
     constructor(app) {
         super(app)   
     }
+  // Tools for GPT
+  async callAPI(method, path, body, baseApiUrl, userApp, tried) {
 
-    async callAppAPI(method, path, body, baseApiUrl, userApp, tried) {
+    const apiUrl = `${baseApiUrl}${path}`
+  
+    const headers = {
+      "authorization": `Bearer ${userApp.accessToken}`,
+      "accept": "application/json",
+      "connection": "keep-alive"
+    };
+  
+    console.log(JSON.stringify({method, apiUrl, headers, body}));
+  
+    try {
+        const response = await axios({
+            method,
+            url: apiUrl,
+            headers,
+            data: body
+        });
+  
+        console.log(response.data);
+        
+        return response.data;
+    } catch (error) {
 
-      const apiUrl = `${baseApiUrl}${path}`
-    
-      const headers = {
-        "authorization": `Bearer ${userApp.accessToken}`,
-        "accept": "application/json",
-        "connection": "keep-alive"
-      };
-    
-      console.log(JSON.stringify({method, apiUrl, headers, body}));
-    
-      try {
-          const response = await axios({
-              method,
-              url: apiUrl,
-              headers,
-              data: body
-          });
-    
-          console.log(response.data);
-          
-          return response.data;
-      } catch (error) {
+        console.log(error.response.statusText);
+        console.log(error.response.status);
+        console.log(tried);
 
-          console.log(error.response.statusText);
-          console.log(error.response.status);
-          console.log(tried);
+        if (error.response.statusText === "Unauthorized" && error.response.status === 401 && !tried) {
+            console.log("retrying");
+            const refreshedApp = await this.refreshAuth(userApp);
 
-          if (error.response.statusText === "Unauthorized" && error.response.status === 401 && !tried) {
-              console.log("retrying");
-              const refreshedApp = await this.refreshAuth(userApp);
+            this.callAppAPI(method, path, body, baseApiUrl, refreshedApp, true);
 
-              this.callAppAPI(method, path, body, baseApiUrl, refreshedApp, true);
-
-          } else {
-              console.error(`Error occurred while calling the API: ${error}`);
-              // console.log(error);
-          }
-          return null;
-      }
+        } else {
+            console.error(`Error occurred while calling the API: ${error}`);
+            // console.log(error);
+        }
+        return null;
     }
+  }
 
+  // Methods for auth and API documentation management
   async getApiUrl(accessToken) {
 
     console.log("Jira");
@@ -127,23 +128,6 @@ class Jira extends App {
     }
 
 
-  }
-
-  async getIssuesList(userApp, data) {
-
-    // const { project, assignee, properties } = data;
-
-    const apiUrl = userApp.apiUrl;
-
-    const apiResponse = await this.callAppAPI("GET", "/rest/api/3/search", "", apiUrl, userApp);
-
-    return apiResponse;
-
-  }
-
-  async getMethodDocs() {
-
-  
   }
   
 

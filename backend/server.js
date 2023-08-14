@@ -10,7 +10,7 @@ import bodyParser from "body-parser";
 import { sequelize } from './database/db.js';
 import { Op } from 'sequelize';
 import { PineconeClient } from "@pinecone-database/pinecone";
-import { User, Conversation, Message, APIRequest, App as App_sql, UserApp, Documentation } from './database/models.js';
+import { User, Conversation, Message, Request, App as App_sql, UserApp, Documentation } from './database/models.js';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import path from 'path';
@@ -21,6 +21,7 @@ import crypto from "crypto";
 // import util
 import openai from "./utils/openai.js"
 import appManager from "./utils/apps/index.js"
+import RequestAgent from "./utils/requestAgent.js"
 import pinecone from "./database/pinecone.js"
 import { sendEmail } from "./utils/sendgrid.js"
 
@@ -247,12 +248,12 @@ async function fulfillRequest(userRequest, documentation, numPass, apiRequest, s
     let searchString = apiRequest ? apiRequest : userRequest;
 
 
-    // Retrieve relevant API paths for the selected app
+    // Retrieve API paths relevant to the user request for the selected app
     const relevantDocs = await similaritySearch(searchString, selectedApp.name, 4);
 
     console.log(relevantDocs);
 
-    // Check the similarity score of the highest scored doc for relevancy
+    // Set minimum score
     const minScore = 0.70;
     let apiDocumentation = "";
     let alteredRequest;
@@ -262,9 +263,10 @@ async function fulfillRequest(userRequest, documentation, numPass, apiRequest, s
     // Checks to see if the API documentation retrieval is relevant
     if (relevantDocs.matches[0].score > minScore) {
 
-      // Builds API documentation based on similaritySearch results
+      // Builds a neatly formatted summary of each relevant API path
       const apiEndpoints = buildApiDocumentation(relevantDocs.matches, "summary", documentation)
 
+      // Builds prompt containing the user request and formatted summary
       alteredRequest = buildApiPrompt(userRequest, true, apiEndpoints, selectedApp, userApp, "summary");
 
     } else {
@@ -277,8 +279,8 @@ async function fulfillRequest(userRequest, documentation, numPass, apiRequest, s
 
     }
     
-    // GPT to decide whether to call the API endpoint or ask the user for more information
-    const decision = await openai.decide(alteredRequest);
+    // GPT to decide whether to choose the most relevant API endpoint
+    const decision = await openai.chooseEndpoint(alteredRequest);
 
     console.log(JSON.stringify(decision));
 
@@ -315,8 +317,7 @@ async function fulfillRequest(userRequest, documentation, numPass, apiRequest, s
 
         if (apiArgs) {
 
-          const handleApp = appManager.getApp(selectedApp);
-
+          // Calls the selected Apps API with the request built by GPT
           const apiResponse = await handleApp.callAppAPI(apiArgs.method, apiArgs.path, apiArgs.body, userApp.apiUrl, userApp);
 
           if (apiResponse === null) {
@@ -329,18 +330,14 @@ async function fulfillRequest(userRequest, documentation, numPass, apiRequest, s
 
         }
 
-      } else if (decision.func_name === "getMoreInfo") {
-
-        const infoSource = decisionArgs.source;
-
-          return decisionArgs.question
-
       } else {
 
         return cannotFulfillRequest;
 
       }
 
+    } else {
+      return cannotFulfillRequest;
     }
 
   } catch (error) {
@@ -382,10 +379,50 @@ router.post("/chat", authenticate, async (req, res) => {
   console.log(userId);
 
   const userMessage = req.body.message;
+  const conversationId = req.body.conversationId;
+  const userRequestId = req.body.requestId;
+
+
+  // Get conversation if exists
+  let conversation;
+
+  if (conversationId) {
+    conversation = await Conversation.findByPk(conversationId);
+  }
+
+  // If no conversation found with the provided ID or no ID was provided, create a new one
+  if (!conversation) {
+    conversation = await Conversation.create({
+      title: userMessage,
+    });
+    conversationId = conversation.id;
+  }
+
+  await Message.create({
+    content: userMessage,
+    type: "user",
+    userId: userId,
+    conversationId: conversation.id
+  });
+
+  // Get request if it exists
+  let userRequest;
+
+  if (userRequestId) {
+    userRequest = await Request.findByPk(userRequestId);
+  }
+
+  if (!userRequest) {
+    userRequest = await Request.create({
+      userRequest: userMessage,
+      conversationId,
+    });
+
+
+  }
 
   // Get user's apps and convert to string to pass to GPT with user message
   const userApps = await getApps(userId);
-
   const userAppsString = userApps.filter(app => app.isConnected === true).map(app => app.name).join(', ');
 
   try {
@@ -407,14 +444,32 @@ router.post("/chat", authenticate, async (req, res) => {
       selectedApp = userApps.filter(app => app.name === selectedApp)[0];
       console.log(selectedApp.documentationUrl);
 
+      userRequest = {
+        conversation,
+        app: selectedApp,
+        userId,
+        userMessage,
+        userRequestId
+      };
+    
+      const requestHandler = new RequestAgent(userRequest);
+
       
-      // Initialize app handler. App handler performs all actions related to the app
+      // Initialize app handler with selected app. App handler performs all actions related to the app
       const handleApp = appManager.getApp(selectedApp);
 
       // Load the API documentation for the app
       const documentation = await handleApp.loadDocumentation();
 
+
+      // Tries to fulfill user request
       const chatResponse = await fulfillRequest(optimizedRequest, documentation, null, null, selectedApp, userId);
+
+      await Message.create({
+        content: chatResponse,
+        type: "bot",
+        conversationId: conversation.id
+      });
 
       res.json(chatResponse)
 
@@ -431,6 +486,32 @@ router.post("/chat", authenticate, async (req, res) => {
     res.status(500).send('Error with chat route');
   }
 
+});
+
+router.get('/conversations', authenticate, async (req, res) => {
+  const userId = req.userId;
+
+  try {
+
+    const conversations = await Conversation.findAll({
+      where: { userId },
+      include: [{
+        model: Message,
+        as: 'messages', 
+        order: [['createdAt', 'ASC']] 
+      }],
+      order: [['updatedAt', 'DESC']]
+    });
+
+    if (conversations) {
+      res.json(conversations);
+    } else {
+      res.status(404).send("Conversations not found.");
+    }
+  } catch (error) {
+    console.error('Error fetching conversations:', error);
+    res.status(500).send('Error fetching conversations');
+  }
 });
 
 router.post("/handle-connect/:appId", authenticate, async (req, res) => {

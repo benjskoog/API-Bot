@@ -7,7 +7,7 @@ import { Configuration, OpenAIApi } from "openai";
 import { get_encoding, encoding_for_model } from "@dqbd/tiktoken";
 import bodyParser from "body-parser";
 import { PineconeClient } from "@pinecone-database/pinecone";
-import { User, Conversation, Message, APIRequest, App as App_sql, UserApp, Documentation } from '../../database/models.js';
+import { User, Conversation, Message, Request, App as App_sql, UserApp, Documentation } from '../../database/models.js';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import path from 'path';
@@ -30,7 +30,9 @@ class Asana extends App {
         super(app)   
     }
 
-    async callAppAPI(method, path, body, baseApiUrl, userApp, tried) {
+
+    // Tools for GPT
+    async callAPI(method, path, body, baseApiUrl, userApp, tried) {
 
         const apiUrl = `${baseApiUrl}${path}`
       
@@ -71,7 +73,7 @@ class Asana extends App {
         }
       }
     
-    
+    // Methods for auth and API documentation management
     async refreshAuth(userApp) {
 
         const app = await UserApp.findOne({ where: { id: userApp.id } });

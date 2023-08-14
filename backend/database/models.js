@@ -74,14 +74,18 @@ const Message = sequelize.define('Message', {
       key: 'id'
     }
   },
+  type: {
+    type: DataTypes.STRING,
+    allowNull: false
+  },
   content: {
     type: DataTypes.TEXT,
     allowNull: false
   }
 });
 
-// Define APIRequest model
-const APIRequest = sequelize.define('APIRequest', {
+// Define Request model
+const Request = sequelize.define('Request', {
     id: {
         type: DataTypes.UUID,
         allowNull: false,
@@ -96,6 +100,10 @@ const APIRequest = sequelize.define('APIRequest', {
       key: 'id'
     }
   },
+  userRequest: {
+    type: DataTypes.TEXT,
+    allowNull: false
+  },
   endpoint: {
     type: DataTypes.STRING,
     allowNull: false
@@ -105,6 +113,10 @@ const APIRequest = sequelize.define('APIRequest', {
     allowNull: true
   },
   responsePayload: {
+    type: DataTypes.JSON,
+    allowNull: true
+  },
+  tasks: {
     type: DataTypes.JSON,
     allowNull: true
   },
@@ -368,15 +380,15 @@ Message.belongsTo(Conversation, {
   foreignKey: 'conversationId'
 });
 
-// Conversation - APIRequest relationship
-Conversation.hasMany(APIRequest, {
+// Conversation - Request relationship
+Conversation.hasMany(Request, {
   foreignKey: 'conversationId'
 });
-APIRequest.belongsTo(Conversation, {
+Request.belongsTo(Conversation, {
   foreignKey: 'conversationId'
 });
 
 User.hasMany(PasswordResetToken, { foreignKey: 'userId' });
 PasswordResetToken.belongsTo(User, { foreignKey: 'userId' });
 
-export { User, Conversation, Message, APIRequest, App, PasswordResetToken, UserApp, Documentation };
+export { User, Conversation, Message, Request, App, PasswordResetToken, UserApp, Documentation };
