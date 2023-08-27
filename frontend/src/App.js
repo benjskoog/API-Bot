@@ -4,6 +4,7 @@ import './App.css';
 import Chat from './components/Chat/Chat';
 import NavBar from './components/NavBar';
 import Platforms from './components/Apps';
+import Conversations from './components/Conversations'
 import Footer from './components/Footer';
 import Login from './components/Login/Login';
 import Register from './components/Login/Register';
@@ -22,7 +23,10 @@ function App() {
               <Router>
             <Routes>
               <Route path="/" element={<NavBar />} />
+              <Route path="/chat/:conversationId" element={<NavBar currentPath={"/chat"} />} />
               <Route path="/chat" element={<NavBar currentPath={"/chat"} />} />
+              <Route path="/conversations" element={<NavBar currentPath={"/conversations"} />} />
+              <Route path="/requests" element={<NavBar currentPath={"/requests"} />} />
               <Route path="/apps" element={<NavBar currentPath={"/apps"} />} />
               <Route path="/app/:appId" element={<NavBar currentPath={"/app"} />} />
               <Route path="/new-app" element={<NavBar currentPath={"/new-app"} />} />

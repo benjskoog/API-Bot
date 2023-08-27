@@ -63,7 +63,7 @@ class Asana extends App {
                 console.log("retrying");
                 const refreshedApp = await this.refreshAuth(userApp);
 
-                this.callAppAPI(method, path, body, baseApiUrl, refreshedApp, true);
+                this.callAPI(method, path, body, baseApiUrl, refreshedApp, true);
 
             } else {
                 console.error(`Error occurred while calling the API: ${error}`);

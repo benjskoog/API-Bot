@@ -203,6 +203,47 @@ class OpenAI {
             }
           }]
 
+          this.selectKeyFunction = [{
+            "name": "selectResponseKey",
+            "description": "Selects the path (in dot notation) to access the requested data from an API response based on its structure.",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "Path of the desired data array"
+                }
+              },
+              "required": ["path"]
+            }
+          }]
+          
+          this.userDataFunction = [{
+            "name": "returnUserSchema",
+            "description": "Returns the data schema to the user",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "userFields": {
+                  "type": "array",
+                  "description": "These are all the keys that make sense for an end user to see",
+                  "items": {
+                    "type": "string",
+                 }
+                },
+                "linkFields": {
+                  "type": "array",
+                  "description": "These are all the keys that might contain a link. The key may be called 'links' or 'self' or contain 'url' in it.",
+                  "items": {
+                    "type": "string",
+                 }
+                }
+              },
+              "required": ["userFields"]
+            }
+          }] 
+          
+
           this.optimizeRequestFunction = [{
 
             "name": "saveOptimizedRequest",
@@ -241,7 +282,7 @@ class OpenAI {
 
           this.decideSystemMessage = "You are an enterprise application co-pilot. You will be selecting the API endpoint most relevant to the user's request. If you are presented with an API endpoint that is relevant, but you need more information to make the request, please ask the user.";
           
-          this.returnResponseSystemMessage = "You are a helpful assistant that formats API responses into user-friendly messages.";
+          this.returnResponseSystemMessage = "You are a helpful assistant that determines which data points are useful to an end user";
 
           this.unsupportedSystemMessages = {
             api: "You are a helpful assistant that calls enterprise software API's and formats responses into user-friendly messages. In this specific case, you are handling requests that are not supported by the API.",
@@ -417,66 +458,115 @@ class OpenAI {
         }
     }
 
-    async returnResponse(apiResponse, method) {
+    async returnData(apiResponse, method) {
 
-        console.log(apiResponse)
-
-        if (apiResponse === null) {
-          return "No data available."
-        }
-
-        let prompt;
-        let dataToFormat;
-      
-        if (method === "GET") {
+      console.log(apiResponse);
+  
+      if (apiResponse === null) {
+          return "No data available.";
+      }
+  
+      let prompt;
+      let dataToFormat;
+  
+      if (method === "GET") {
           // Determine if apiResponse is an object with a data property, a single record object, or an array
           if (Array.isArray(apiResponse)) {
-            dataToFormat = apiResponse;
+              dataToFormat = apiResponse;
           } else if (apiResponse.data && Array.isArray(apiResponse.data)) {
-            dataToFormat = apiResponse.data;
+              dataToFormat = apiResponse.data;
           } else {
-            // Treat apiResponse as a single record object
-            dataToFormat = [apiResponse];
+              // Treat apiResponse as a single record object
+              dataToFormat = [apiResponse];
           }
-
-          console.log(`Response data to format: ${dataToFormat}`);
-
-          let responseData;
-
-          if (dataToFormat.length > 1) {
-                // Only include the first two properties of each object in the data array
-            responseData = dataToFormat.map(obj => {
-                const keys = Object.keys(obj);
-                return {
-                [keys[0]]: obj[keys[0]],
-                [keys[1]]: obj[keys[1]]
-                };
-            });
-          } else {
-            responseData = dataToFormat;
-          }
-    
-          
-          console.log(`Reduced response: ${responseData}`);
-      
-          prompt = `The user has requested to retrieve data. Here is a brief overview of the data retrieved: \n\n ${JSON.stringify(responseData, null, 2)} \n\n How would you format this response for the user?`;
-        } else {
+  
+          prompt = `The user has requested to retrieve data. Here are the keys and their data types from the retrieved data: \n\n ${JSON.stringify(apiResponse, null, 2)} \n\n Please call the function indicating the path of data array.`;
+      } else {
           prompt = `The user has requested a ${method} request. Here is the response: \n ${JSON.stringify(apiResponse, null, 2)} \n How would you format this response for the user?`;
-        }
-
-        const inputString = this.returnResponseSystemMessage + prompt;
-
-        console.log(tokenizer.encode(inputString).length);
-      
-        const getRequest = await openai.createChatCompletion({
-          model: "gpt-3.5-turbo",
-          messages: [{"role": "system", "content": this.returnResponseSystemMessage}, 
-          {role: "user", content: prompt}]
-        });
-      
-        const message = getRequest.data.choices[0].message.content;
-        return message;
       }
+
+      console.log(prompt);
+  
+      const inputString = this.returnResponseSystemMessage + prompt;
+  
+      console.log(tokenizer.encode(inputString).length);
+  
+      const selectedPath = await openai.createChatCompletion({
+          model: "gpt-3.5-turbo",
+          messages: [
+              { "role": "system", "content": this.returnResponseSystemMessage },
+              { role: "user", content: prompt }
+          ],
+          functions: this.selectKeyFunction
+      });
+
+      if (selectedPath.data.choices[0].message.function_call) {
+
+        console.log(`function decision: ${JSON.stringify(selectedPath.data.choices[0].message.function_call)}`);
+
+        const { arguments: functionArgs } = selectedPath.data.choices[0].message.function_call;
+  
+        const args = JSON.parse(functionArgs);
+
+        console.log(args);
+
+        return { args }
+
+      } else {
+
+          return { response: selectedPath.data.choices[0].message.content }
+
+      }
+  
+  }
+
+  async getUserData(data) {
+
+    let prompt;
+    let dataToFormat;
+
+    prompt = `The following is data returned from an API call: \n\n ${JSON.stringify(data, null, 2)} \n\n Please call the function selecting the fields and links to display to the end user.`;
+
+    console.log(prompt);
+
+    const inputString = this.returnResponseSystemMessage + prompt;
+
+    console.log(tokenizer.encode(inputString).length);
+
+    try {
+
+      const selectedFields = await openai.createChatCompletion({
+        model: "gpt-3.5-turbo",
+        messages: [
+            { "role": "system", "content": this.returnResponseSystemMessage },
+            { role: "user", content: prompt }
+        ],
+        functions: this.userDataFunction
+      });
+
+      if (selectedFields.data.choices[0].message.function_call) {
+
+        console.log(`function decision: ${JSON.stringify(selectedFields.data.choices[0].message.function_call)}`);
+
+        const { arguments: functionArgs } = selectedFields.data.choices[0].message.function_call;
+
+        const args = JSON.parse(functionArgs);
+
+        console.log(args);
+
+        return { args }
+
+      } else {
+
+          return { response: selectedFields.data.choices[0].message.content }
+
+      }
+
+    } catch (e) {
+      console.error(e);
+    }
+
+}
 
     async returnUnsupported(prompt, type) {
 

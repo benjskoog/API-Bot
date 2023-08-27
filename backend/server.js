@@ -127,226 +127,6 @@ const resolveRef = (schema, root) => {
   return schema;
 }
 
-const buildApiDocumentation = (searchResults, docType, documentation) => {
-
-  // docType should be "full" or "summary"
-  const { paths } = documentation;
-
-  // Initialize an empty array to hold the documentation strings
-  let documentationStrings = [];
-
-  try {
-
-    searchResults.forEach(match => {
-      const { metadata } = match;
-      const { method, path } = metadata;
-
-      // Find the corresponding path and method in the API documentation
-      if (paths[path] && paths[path][method]) {
-        let endpointInfo = paths[path][method];
-
-        // Resolve the $ref in the endpoint info
-
-        try {
-          endpointInfo = resolveRef(endpointInfo, documentation);
-        } catch (err) {
-          `Failed to resolve base schema: ${err.message}`
-        }
-
-        let docString = `
-          Path: ${path}
-          Method: ${method.toUpperCase()}
-          Summary: ${endpointInfo.summary}
-          Description: ${endpointInfo.description}
-        `;
-
-        if (endpointInfo.parameters && docType === 'full') {
-          // Resolve $refs in parameters
-          const resolvedParameters = endpointInfo.parameters.map(param => resolveRef(param, documentation));
-          docString += `
-          Parameters: ${JSON.stringify(resolvedParameters, null, 2)}
-          `;
-        }
-
-        if (endpointInfo.requestBody && docType === 'full') {
-          docString += `
-          Request Body: ${JSON.stringify(endpointInfo.requestBody, null, 2)}
-          `;
-        }
-
-        documentationStrings.push(docString);
-      }
-    });
-    
-  } catch (err) {
-    console.error(`Failed to build API documentation: ${err.message}`);
-  }
-
-  const totalDocumentationString = documentationStrings.join("\n\n----------------------\n\n");
-
-  return totalDocumentationString;
-};
-
-async function similaritySearch(userRequest, appName,topK){
-
-  const embedding = await openai.createEmbedding(userRequest);
-
-  const queryResponse = await pinecone.searchByApp(embedding, appName, topK);
-
-  return queryResponse;
-
-}
-
-function buildApiPrompt(userRequest, supported, apiDocumentation, selectedApp, userApp, type) {
-
-  const today = new Date();
-  const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-
-  let prompt = `The following is a user's request to interact with ${selectedApp.name} on ${dateStr}.`;
-  
-  prompt += `User request: ${userRequest} \n`;
-
-  if (supported === true){
-
-    prompt += type === "summary" ? "Read the user's request carefully and select the most relevant endpoint below. Check your work: \n" : `Here is API documentation you can use to call ${selectedApp.name}'s API: \n`;
-
-    prompt += `${apiDocumentation} \n
-    `;
-
-    prompt += type === "summary" ? "Do not select an endpoint that requires information you do not have. Please ask the user for this information first" : "";
-
-    // userApp ? prompt += ` The user's ID in ${selectedApp.name} is ${userApp.appUserId}. Only use this where the documentation states to explicitly use the user's ID. \n` : "";
-
-  } else {
-
-    prompt = prompt + `The request is not supported by the API. Please inform the user. You can also answer their question if it is unrelated to the platform or the API.`;
-
-  }
-
-  console.log(prompt);
-
-  return prompt;
-  
-}
-
-async function fulfillRequest(userRequest, documentation, numPass, apiRequest, selectedApp, userId) {
-
-  try {
-
-    // Gets userApp from db
-    const userApp = await UserApp.findOne({
-      where: {
-        userId,
-        appId: selectedApp.id,
-      }
-    });
-
-    const handleApp = appManager.getApp(selectedApp);
-
-    let currentPass = numPass + 1;
-
-    let searchString = apiRequest ? apiRequest : userRequest;
-
-
-    // Retrieve API paths relevant to the user request for the selected app
-    const relevantDocs = await similaritySearch(searchString, selectedApp.name, 4);
-
-    console.log(relevantDocs);
-
-    // Set minimum score
-    const minScore = 0.70;
-    let apiDocumentation = "";
-    let alteredRequest;
-    const cannotFulfillRequest = "I am sorry, I cannot help with this request right now. Is there anything else I can help you with?";
-
-
-    // Checks to see if the API documentation retrieval is relevant
-    if (relevantDocs.matches[0].score > minScore) {
-
-      // Builds a neatly formatted summary of each relevant API path
-      const apiEndpoints = buildApiDocumentation(relevantDocs.matches, "summary", documentation)
-
-      // Builds prompt containing the user request and formatted summary
-      alteredRequest = buildApiPrompt(userRequest, true, apiEndpoints, selectedApp, userApp, "summary");
-
-    } else {
-
-      alteredRequest = buildApiPrompt(userRequest, false);
-
-      const unsupportedResponse = openai.returnUnsupported(alteredRequest, "api");
-
-      return unsupportedResponse
-
-    }
-    
-    // GPT to decide whether to choose the most relevant API endpoint
-    const decision = await openai.chooseEndpoint(alteredRequest);
-
-    console.log(JSON.stringify(decision));
-
-    const decisionArgs = decision.args;
-
-    // Checks if GPT called a function
-    if (decisionArgs) {
-
-      if (decision.func_name === "chooseAPIEndpoint") {
-
-        const bestMatch = decisionArgs.order;
-
-        console.log(bestMatch);
-
-
-        // Expands documentation for the selected endpoint
-        const apiDocumentation = buildApiDocumentation([relevantDocs.matches[bestMatch]], "full", documentation);
-
-        console.log([relevantDocs.matches[bestMatch]]);
-
-        // Builds prompt that GPT will use to call the API endpoint
-        alteredRequest = buildApiPrompt(userRequest, true, apiDocumentation, selectedApp, userApp, "full");
-
-        // Uncomment line below to return API documentation in chat for testing purposes
-
-        // return alteredRequest;
-
-        // GPT builds API request
-        const apiCall = await openai.getAPICall(alteredRequest, selectedApp, userApp, userId);
-
-        const apiArgs = apiCall.args;
-
-        console.log(apiArgs);
-
-        if (apiArgs) {
-
-          // Calls the selected Apps API with the request built by GPT
-          const apiResponse = await handleApp.callAppAPI(apiArgs.method, apiArgs.path, apiArgs.body, userApp.apiUrl, userApp);
-
-          if (apiResponse === null) {
-
-          }
-
-          const responseForUser = await openai.returnResponse(apiResponse, apiArgs.method);
-
-          return responseForUser;
-
-        }
-
-      } else {
-
-        return cannotFulfillRequest;
-
-      }
-
-    } else {
-      return cannotFulfillRequest;
-    }
-
-  } catch (error) {
-    console.error(`Failed to fulfill request: ${error.message}`);
-    throw error;
-  }
-
-}
-
 async function getApps(userId) {
   const apps = await App_sql.findAll({
     include: {
@@ -371,7 +151,7 @@ async function getApps(userId) {
   return transformedApps;
 }
 
-
+// main chat route
 router.post("/chat", authenticate, async (req, res) => {
 
   const userId = req.userId;
@@ -379,21 +159,27 @@ router.post("/chat", authenticate, async (req, res) => {
   console.log(userId);
 
   const userMessage = req.body.message;
-  const conversationId = req.body.conversationId;
-  const userRequestId = req.body.requestId;
+  let conversationId = req.body.conversationId;
+  let userRequestId = req.body.requestId;
 
 
   // Get conversation if exists
   let conversation;
 
   if (conversationId) {
-    conversation = await Conversation.findByPk(conversationId);
+    conversation = await Conversation.findByPk(conversationId, {
+      include: [{
+        model: Message,
+        order: [['createdAt', 'ASC']]
+      }]
+    });
   }
 
   // If no conversation found with the provided ID or no ID was provided, create a new one
   if (!conversation) {
     conversation = await Conversation.create({
       title: userMessage,
+      userId
     });
     conversationId = conversation.id;
   }
@@ -404,22 +190,6 @@ router.post("/chat", authenticate, async (req, res) => {
     userId: userId,
     conversationId: conversation.id
   });
-
-  // Get request if it exists
-  let userRequest;
-
-  if (userRequestId) {
-    userRequest = await Request.findByPk(userRequestId);
-  }
-
-  if (!userRequest) {
-    userRequest = await Request.create({
-      userRequest: userMessage,
-      conversationId,
-    });
-
-
-  }
 
   // Get user's apps and convert to string to pass to GPT with user message
   const userApps = await getApps(userId);
@@ -442,38 +212,30 @@ router.post("/chat", authenticate, async (req, res) => {
     if (appDecision.args) {
       selectedApp = appDecision.args.app;
       selectedApp = userApps.filter(app => app.name === selectedApp)[0];
-      console.log(selectedApp.documentationUrl);
 
-      userRequest = {
+      const userRequest = {
         conversation,
         app: selectedApp,
         userId,
         userMessage,
-        userRequestId
+        id: userRequestId,
+        optimizedRequest
       };
     
       const requestHandler = new RequestAgent(userRequest);
 
-      
-      // Initialize app handler with selected app. App handler performs all actions related to the app
-      const handleApp = appManager.getApp(selectedApp);
+      const requestResponse = await requestHandler.fulfill();
 
-      // Load the API documentation for the app
-      const documentation = await handleApp.loadDocumentation();
-
-
-      // Tries to fulfill user request
-      const chatResponse = await fulfillRequest(optimizedRequest, documentation, null, null, selectedApp, userId);
+      console.log(requestResponse);
 
       await Message.create({
-        content: chatResponse,
+        content: requestResponse.responseForUser,
         type: "bot",
+        userId: userId,
         conversationId: conversation.id
       });
 
-      res.json(chatResponse)
-
-      //console.log(documentation);
+      res.json(requestResponse);
 
     } else {
       const unsupportedResponse = openai.returnUnsupported(userMessage, "api");
@@ -488,6 +250,8 @@ router.post("/chat", authenticate, async (req, res) => {
 
 });
 
+
+// Conversations routes
 router.get('/conversations', authenticate, async (req, res) => {
   const userId = req.userId;
 
@@ -496,14 +260,16 @@ router.get('/conversations', authenticate, async (req, res) => {
     const conversations = await Conversation.findAll({
       where: { userId },
       include: [{
-        model: Message,
-        as: 'messages', 
+        model: Message, 
         order: [['createdAt', 'ASC']] 
+      },
+      {
+        model: Request
       }],
       order: [['updatedAt', 'DESC']]
     });
 
-    if (conversations) {
+    if (conversations.length > 0) {
       res.json(conversations);
     } else {
       res.status(404).send("Conversations not found.");
@@ -513,6 +279,122 @@ router.get('/conversations', authenticate, async (req, res) => {
     res.status(500).send('Error fetching conversations');
   }
 });
+
+router.get('/conversations/:id', authenticate, async (req, res) => {
+  const { id } = req.params;   // Get the conversation ID from the route parameter
+  const userId = req.userId;  // Get the authenticated user's ID
+
+  try {
+    const conversation = await Conversation.findOne({
+      where: { 
+        id,          // Match the conversation ID
+        userId      // Ensure that the authenticated user owns the conversation
+      },
+      include: [{
+        model: Message,
+        order: [['createdAt', 'ASC']] 
+      },
+      {
+        model: Request
+      }]
+    });
+
+    if (!conversation) {
+      return res.status(404).send("Conversation not found.");
+    }
+
+    res.json(conversation);
+
+  } catch (error) {
+    console.error('Error fetching conversation:', error);
+    res.status(500).send('Error fetching conversation');
+  }
+});
+
+
+router.delete('/conversations/:id', authenticate, async (req, res) => {
+  const { id } = req.params;   // Get the conversation id from the route parameter
+  const userId = req.userId;  // Get the authenticated user's ID
+
+  try {
+    const conversation = await Conversation.findOne({
+      where: { 
+        id,          // Match the conversation id
+      }
+    });
+
+    if (!conversation) {
+      return res.status(404).send("Conversation not found.");
+    }
+
+    await conversation.destroy();  // Delete the conversation
+    res.status(200).send("Conversation deleted successfully.");
+
+  } catch (error) {
+    console.error('Error deleting conversation:', error);
+    res.status(500).send('Error deleting conversation');
+  }
+});
+
+// Requests routes
+router.get('/requests', authenticate, async (req, res) => {
+
+  const userId = req.userId;
+
+  try {
+    const requests = await Request.findAll({
+      where: {userId}
+    });
+
+    if (requests) {
+      res.json(requests);
+    } else {
+      res.status(404).send("Requests not found.");
+    }
+  } catch (error) {
+    console.error('Error fetching requests:', error);
+    res.status(500).send('Error fetching requests');
+  }
+});
+
+router.get('/requests/:requestId', authenticate, async (req, res) => {
+  const { requestId } = req.params;
+
+  try {
+    const singleRequest = await Request.findOne({
+      where: { id: requestId }
+    });
+
+    if (singleRequest) {
+      res.json(singleRequest);
+    } else {
+      res.status(404).send("Request not found.");
+    }
+  } catch (error) {
+    console.error('Error fetching request:', error);
+    res.status(500).send('Error fetching request');
+  }
+});
+
+router.delete('/requests/:requestId', authenticate, async (req, res) => {
+  const { requestId } = req.params;
+
+  try {
+    const deletedRows = await Request.destroy({
+      where: { id: requestId }
+    });
+
+    if (deletedRows) {
+      res.status(204).send();  // 204 No Content for successful delete
+    } else {
+      res.status(404).send("Request not found.");
+    }
+  } catch (error) {
+    console.error('Error deleting request:', error);
+    res.status(500).send('Error deleting request');
+  }
+});
+
 
 router.post("/handle-connect/:appId", authenticate, async (req, res) => {
   // Extract the data from the request

@@ -30,7 +30,7 @@ class Jira extends App {
   // Tools for GPT
   async callAPI(method, path, body, baseApiUrl, userApp, tried) {
 
-    const apiUrl = `${baseApiUrl}${path}`
+    const apiUrl = `${userApp.apiUrl}${path}`
   
     const headers = {
       "authorization": `Bearer ${userApp.accessToken}`,
@@ -53,15 +53,13 @@ class Jira extends App {
         return response.data;
     } catch (error) {
 
-        console.log(error.response.statusText);
-        console.log(error.response.status);
-        console.log(tried);
+      console.log(error);
 
-        if (error.response.statusText === "Unauthorized" && error.response.status === 401 && !tried) {
+        if (error.response?.status === 401 && !tried) {
             console.log("retrying");
             const refreshedApp = await this.refreshAuth(userApp);
 
-            this.callAppAPI(method, path, body, baseApiUrl, refreshedApp, true);
+            this.callAPI(method, path, body, userApp.apiUrl, refreshedApp, true);
 
         } else {
             console.error(`Error occurred while calling the API: ${error}`);

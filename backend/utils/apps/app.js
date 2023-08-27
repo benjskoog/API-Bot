@@ -53,10 +53,13 @@ const resolveRef = (schema, root) => {
   return schema;
 }
 
-const buildApiDocumentation = (searchResults, docType, documentation) => {
+function buildApiDocumentation(searchResults, docType, documentation) {
 
   // docType should be "full" or "summary"
   const { paths } = documentation;
+
+  // Initialize empty variable to store enhanced API documentation
+  let doc;
 
   // Initialize an empty array to hold the documentation strings
   let documentationStrings = [];
@@ -94,6 +97,10 @@ const buildApiDocumentation = (searchResults, docType, documentation) => {
           `;
         }
 
+        if (docType === 'full') {
+          doc = { path, method };
+        }
+
         if (endpointInfo.requestBody && docType === 'full') {
           docString += `
           Request Body: ${JSON.stringify(endpointInfo.requestBody, null, 2)}
@@ -108,9 +115,9 @@ const buildApiDocumentation = (searchResults, docType, documentation) => {
     console.error(`Failed to build API documentation: ${err.message}`);
   }
 
-  const totalDocumentationString = documentationStrings.join("\n\n----------------------\n\n");
+  const docString = documentationStrings.join("\n\n----------------------\n\n");
 
-  return totalDocumentationString;
+  return { doc, docString };
 };
 
 async function similaritySearch(userRequest, appName,topK){
@@ -122,45 +129,6 @@ async function similaritySearch(userRequest, appName,topK){
   return queryResponse;
 
 }
-
-function buildApiPrompt(userRequest, supported, apiDocumentation, userApp, type) {
-
-  const today = new Date();
-  const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-
-  let prompt;
-
-  if (supported === true){
-
-    if (type === "summary") {
-
-      prompt = `The following is a user's request to interact with ${this.name} on ${dateStr}. \n`;
-
-      prompt += `User request: ${userRequest} \n`;
-
-      prompt += "Read the user's request carefully and select the most relevant endpoint below. Check your work: \n";
-  
-      // userApp ? prompt += ` The user's ID in ${selectedApp.name} is ${userApp.appUserId}. Only use this where the documentation states to explicitly use the user's ID. \n` : "";
-
-    } else {
-      prompt += `Here is API documentation you can use to call ${this.name}'s API: \n`
-    }
-
-    prompt += `${apiDocumentation} \n`;
-
-  } else {
-
-    prompt = prompt + `The request is not supported by the API. Please inform the user. You can also answer their question if it is unrelated to the platform or the API.`;
-
-  }
-
-  console.log(prompt);
-
-  return prompt;
-  
-}
-
-
 
 class App {
     constructor(app) {
@@ -214,7 +182,7 @@ class App {
     }
   }
 
-  async searchAPI(userRequest, documentation, numPass, apiRequest, userId) {
+  async searchAPI(userRequest, userId) {
 
     try {
   
@@ -226,7 +194,7 @@ class App {
         }
       });
   
-      let searchString = apiRequest ? apiRequest : userRequest;
+      let searchString = userRequest;
   
   
       // Retrieve relevant API paths for the selected app
@@ -239,7 +207,8 @@ class App {
       let apiDocumentation = "";
       let requestedDocs;
       const cannotFulfillRequest = "I am sorry, I cannot help with this request right now. Is there anything else I can help you with?";
-  
+
+      const documentation = await this.loadDocumentation();
   
       // Checks to see if the API documentation retrieval is relevant
       if (relevantDocs.matches[0].score > minScore) {
@@ -247,11 +216,11 @@ class App {
         // Builds API documentation based on similaritySearch results
         const apiEndpoints = buildApiDocumentation(relevantDocs.matches, "summary", documentation)
   
-        requestedDocs = buildApiPrompt(userRequest, true, apiEndpoints, userApp, "summary");
+        requestedDocs = this.buildApiPrompt(userRequest, true, apiEndpoints.docString, userApp, "summary");
   
       } else {
   
-        requestedDocs = buildApiPrompt(userRequest, false);
+        requestedDocs = this.buildApiPrompt(userRequest, false);
   
         const unsupportedResponse = openai.returnUnsupported(requestedDocs, "api");
   
@@ -282,11 +251,22 @@ class App {
           console.log([relevantDocs.matches[bestMatch]]);
   
           // Builds prompt that GPT will use to call the API endpoint
-          requestedDocs = buildApiPrompt(userRequest, true, apiDocumentation, userApp, "full");
+          requestedDocs = this.buildApiPrompt(userRequest, true, apiDocumentation.docString, userApp, "full");
+
+          // Gets enhanced API documentation from db
+          let docs = apiDocumentation.doc;
+
+          docs = await Documentation.findOne({
+            where: {
+              appId: this.id,
+              path: docs.path,
+              method: docs.method
+            }
+          });
   
           // Uncomment line below to return API documentation in chat for testing purposes
   
-          return requestedDocs;
+          return { requestedDocs, docs };
   
         } else {
   
@@ -301,6 +281,47 @@ class App {
       throw error;
     }
   
+  }
+
+  // Internal methods used by tools
+
+  buildApiPrompt(userRequest, supported, apiDocumentation, userApp, type) {
+
+    console.log(this.name)
+  
+    const today = new Date();
+    const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  
+    let prompt = "";
+  
+    if (supported === true){
+  
+      if (type === "summary") {
+  
+        prompt = `The following is a user's request to interact with ${this.name} on ${dateStr}. \n`;
+  
+        prompt += `User request: ${userRequest} \n`;
+  
+        prompt += "Read the user's request carefully and select the most relevant endpoint below. Check your work: \n";
+    
+        // userApp ? prompt += ` The user's ID in ${selectedApp.name} is ${userApp.appUserId}. Only use this where the documentation states to explicitly use the user's ID. \n` : "";
+  
+      } else {
+        prompt += `Here is API documentation you can use to call ${this.name}'s API: \n`
+      }
+  
+      prompt += `${apiDocumentation} \n`;
+  
+    } else {
+  
+      prompt = prompt + `The request is not supported by the API. Please inform the user. You can also answer their question if it is unrelated to the platform or the API.`;
+  
+    }
+  
+    console.log(prompt);
+  
+    return prompt;
+    
   }
 
   // Methods for auth and API documentation management

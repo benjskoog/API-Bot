@@ -84,48 +84,6 @@ const Message = sequelize.define('Message', {
   }
 });
 
-// Define Request model
-const Request = sequelize.define('Request', {
-    id: {
-        type: DataTypes.UUID,
-        allowNull: false,
-        primaryKey: true,
-        unique: true,
-        defaultValue: DataTypes.UUIDV4
-    },
-  conversationId: {
-    type: DataTypes.UUID,
-    references: {
-      model: Conversation, 
-      key: 'id'
-    }
-  },
-  userRequest: {
-    type: DataTypes.TEXT,
-    allowNull: false
-  },
-  endpoint: {
-    type: DataTypes.STRING,
-    allowNull: false
-  },
-  requestPayload: {
-    type: DataTypes.JSON,
-    allowNull: true
-  },
-  responsePayload: {
-    type: DataTypes.JSON,
-    allowNull: true
-  },
-  tasks: {
-    type: DataTypes.JSON,
-    allowNull: true
-  },
-  statusCode: {
-    type: DataTypes.INTEGER,
-    allowNull: true
-  }
-});
-
 // Update App model
 const App = sequelize.define('App', {
     id: {
@@ -160,7 +118,7 @@ const App = sequelize.define('App', {
     allowNull: false
   },
   authUrl: {
-    type: DataTypes.STRING,
+    type: DataTypes.TEXT,
     allowNull: false
   },
   accessTokenUrl: {
@@ -246,6 +204,66 @@ const Documentation = sequelize.define('Documentation', {
     },
     allowNull: false
   }
+});
+
+// Define Request model
+const Request = sequelize.define('Request', {
+  id: {
+      type: DataTypes.UUID,
+      allowNull: false,
+      primaryKey: true,
+      unique: true,
+      defaultValue: DataTypes.UUIDV4
+  },
+conversationId: {
+  type: DataTypes.UUID,
+  references: {
+    model: Conversation, 
+    key: 'id'
+  }
+},
+userId: {
+  type: DataTypes.UUID,
+  references: {
+    model: User, 
+    key: 'id'
+  }
+},
+documentationId: {
+  type: DataTypes.UUID,
+  references: {
+    model: Documentation, 
+    key: 'id'
+  }
+},
+docString: {
+  type: DataTypes.TEXT,
+  allowNull: true
+},
+userRequest: {
+  type: DataTypes.TEXT,
+  allowNull: false
+},
+endpoint: {
+  type: DataTypes.STRING,
+  allowNull: true
+},
+requestPayload: {
+  type: DataTypes.JSON,
+  allowNull: true
+},
+responsePayload: {
+  type: DataTypes.JSON,
+  allowNull: true
+},
+tasks: {
+  type: DataTypes.JSON,
+  allowNull: true
+},
+statusCode: {
+  type: DataTypes.INTEGER,
+  allowNull: true
+}
 });
 
 // New UserApp model
@@ -386,6 +404,22 @@ Conversation.hasMany(Request, {
 });
 Request.belongsTo(Conversation, {
   foreignKey: 'conversationId'
+});
+
+// User - Request relationship
+User.hasMany(Request, {
+  foreignKey: 'userId'
+});
+Request.belongsTo(User, {
+  foreignKey: 'userId'
+});
+
+// Request - Documentation relationship
+Request.hasOne(Documentation, {
+  foreignKey: 'documentationId'
+});
+Documentation.belongsTo(Request, {
+  foreignKey: 'documentationId'
 });
 
 User.hasMany(PasswordResetToken, { foreignKey: 'userId' });
